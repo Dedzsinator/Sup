@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # Database services only
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: sup_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  scylladb:
+    image: scylladb/scylla:5.2
+    ports:
+      - "9042:9042"
+      - "19042:19042"  # JMX
+    volumes:
+      - scylla_data:/var/lib/scylla
+    command: --smp 1 --memory 1G --overprovisioned 1
+
+volumes:
+  postgres_data:
+  scylla_data:

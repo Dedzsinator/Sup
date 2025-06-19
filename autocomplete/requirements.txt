@@ -1,0 +1,50 @@
+# Core dependencies for the Intelligent Autocomplete System
+# Python 3.11+ required
+
+# Deep Learning Framework
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Lightning for streamlined PyTorch training
+pytorch-lightning>=2.0.0
+
+# Transformers and NLP
+transformers>=4.30.0
+tokenizers>=0.13.0
+sentence-transformers>=2.2.0
+
+# Vector Search and Indexing
+faiss-cpu>=1.7.4  # Use faiss-gpu if GPU available
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Hugging Face ecosystem
+huggingface-hub>=0.15.0
+datasets>=2.12.0
+
+# Utilities
+tqdm>=4.65.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+
+# Development and Testing
+pytest>=7.3.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.3.0
+
+# API Server
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+pydantic>=2.0.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Optional: For advanced features
+# sentencepiece>=0.1.99  # For tokenization
+# accelerate>=0.20.0     # For distributed training
+# wandb>=0.15.0          # For experiment tracking

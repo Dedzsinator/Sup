@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autocomplete
+  namespace: sup
+  labels:
+    app: autocomplete
+    component: microservice
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: autocomplete
+  template:
+    metadata:
+      labels:
+        app: autocomplete
+        component: microservice
+    spec:
+      containers:
+        - name: autocomplete
+          image: sup/autocomplete:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "8000"
+            - name: WORKERS
+              value: "2"
+          volumeMounts:
+            - name: autocomplete-data
+              mountPath: /app/data
+              readOnly: true
+            - name: autocomplete-models
+              mountPath: /app/models
+              readOnly: true
+            - name: autocomplete-logs
+              mountPath: /app/logs
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: autocomplete-data
+          persistentVolumeClaim:
+            claimName: autocomplete-data-pvc
+        - name: autocomplete-models
+          persistentVolumeClaim:
+            claimName: autocomplete-models-pvc
+        - name: autocomplete-logs
+          persistentVolumeClaim:
+            claimName: autocomplete-logs-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autocomplete-data-pvc
+  namespace: sup
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autocomplete-models-pvc
+  namespace: sup
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autocomplete-logs-pvc
+  namespace: sup
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autocomplete
+  namespace: sup
+  labels:
+    app: autocomplete
+    component: microservice
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: autocomplete
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: autocomplete-ingress
+  namespace: sup
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+    - host: autocomplete.sup.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: autocomplete
+                port:
+                  number: 8000

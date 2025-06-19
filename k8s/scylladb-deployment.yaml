@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scylladb
+  namespace: sup
+  labels:
+    app: scylladb
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scylladb
+  template:
+    metadata:
+      labels:
+        app: scylladb
+        component: database
+    spec:
+      containers:
+        - name: scylladb
+          image: scylladb/scylla:5.2
+          ports:
+            - containerPort: 9042
+              name: cql
+            - containerPort: 19042
+              name: jmx
+          command:
+            - /docker-entrypoint.py
+            - --smp
+            - "2"
+            - --memory
+            - "2G"
+            - --overprovisioned
+            - "1"
+            - --api-address
+            - "0.0.0.0"
+          volumeMounts:
+            - name: scylla-data
+              mountPath: /var/lib/scylla
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "nodetool status"
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "nodetool status | grep UN"
+            initialDelaySeconds: 60
+            periodSeconds: 10
+      volumes:
+        - name: scylla-data
+          persistentVolumeClaim:
+            claimName: scylla-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scylla-pvc
+  namespace: sup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scylladb
+  namespace: sup
+  labels:
+    app: scylladb
+    component: database
+spec:
+  ports:
+    - port: 9042
+      targetPort: 9042
+      name: cql
+    - port: 19042
+      targetPort: 19042
+      name: jmx
+  selector:
+    app: scylladb
