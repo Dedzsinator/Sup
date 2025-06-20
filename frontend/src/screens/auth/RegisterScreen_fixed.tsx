@@ -16,7 +16,7 @@ interface Props {
     navigation: RegisterScreenNavigationProp;
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
 const isDesktop = width > 1024;
 
@@ -39,7 +39,7 @@ export default function RegisterScreen({ navigation }: Props) {
     const [displayName, setDisplayName] = useState('');
     const [bio, setBio] = useState('');
     const [statusMessage, setStatusMessage] = useState('Hey there! I am using Sup.');
-    const [avatarUri] = useState<string | null>(null);
+    const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [accentColor, setAccentColor] = useState('#3B82F6');
 
     const { register, isLoading } = useAuthStore();

@@ -6,9 +6,10 @@ defmodule Sup.ApiRouter do
   use Plug.Router
   require Logger
 
-  alias Sup.Auth.{Guardian, User}
+  alias Sup.Auth.{Guardian, User, FriendService}
   alias Sup.Room.RoomService
   alias Sup.Messaging.MessageService
+  alias Sup.Voice.CallService
   alias Sup.Autocomplete.Service, as: AutocompleteService
 
   plug(:match)
@@ -175,12 +176,13 @@ defmodule Sup.ApiRouter do
   # Autocomplete endpoints
   post "/autocomplete/suggest" do
     with {:ok, params} <- validate_autocomplete_params(conn.body_params),
-         {:ok, suggestions} <- AutocompleteService.get_suggestions(
-           params["text"],
-           user_id: conn.assigns.current_user.id,
-           room_id: params["room_id"],
-           limit: params["limit"] || 5
-         ) do
+         {:ok, suggestions} <-
+           AutocompleteService.get_suggestions(
+             params["text"],
+             user_id: conn.assigns.current_user.id,
+             room_id: params["room_id"],
+             limit: params["limit"] || 5
+           ) do
       send_resp(conn, 200, Jason.encode!(%{suggestions: suggestions}))
     else
       {:error, reason} ->
@@ -190,12 +192,13 @@ defmodule Sup.ApiRouter do
 
   post "/autocomplete/complete" do
     with {:ok, params} <- validate_completion_params(conn.body_params),
-         {:ok, completion} <- AutocompleteService.get_completion(
-           params["text"],
-           user_id: conn.assigns.current_user.id,
-           room_id: params["room_id"],
-           max_length: params["max_length"] || 50
-         ) do
+         {:ok, completion} <-
+           AutocompleteService.get_completion(
+             params["text"],
+             user_id: conn.assigns.current_user.id,
+             room_id: params["room_id"],
+             max_length: params["max_length"] || 50
+           ) do
       send_resp(conn, 200, Jason.encode!(%{completion: completion}))
     else
       {:error, reason} ->
@@ -207,7 +210,7 @@ defmodule Sup.ApiRouter do
     case AutocompleteService.health_check() do
       {:ok, status} ->
         send_resp(conn, 200, Jason.encode!(status))
-      
+
       {:error, reason} ->
         send_resp(conn, 503, Jason.encode!(%{error: reason}))
     end
@@ -217,10 +220,259 @@ defmodule Sup.ApiRouter do
     case AutocompleteService.get_stats() do
       {:ok, stats} ->
         send_resp(conn, 200, Jason.encode!(stats))
-      
+
       {:error, reason} ->
         send_resp(conn, 503, Jason.encode!(%{error: reason}))
     end
+  end
+
+  # Friend management endpoints
+  get "/friends" do
+    user_id = conn.assigns.current_user.id
+
+    case FriendService.get_friends(user_id) do
+      {:ok, friends} ->
+        send_resp(conn, 200, Jason.encode!(%{friends: friends}))
+
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/friends/requests" do
+    user_id = conn.assigns.current_user.id
+
+    case FriendService.get_friend_requests(user_id) do
+      {:ok, requests} ->
+        send_resp(conn, 200, Jason.encode!(%{requests: requests}))
+
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/friends/request" do
+    with {:ok, params} <- validate_friend_request_params(conn.body_params),
+         {:ok, request} <-
+           FriendService.send_friend_request(
+             conn.assigns.current_user.id,
+             params["target_user_id"]
+           ) do
+      send_resp(conn, 201, Jason.encode!(%{request: request}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  put "/friends/request/:request_id" do
+    request_id = conn.path_params["request_id"]
+
+    with {:ok, params} <- validate_friend_response_params(conn.body_params),
+         {:ok, result} <-
+           FriendService.respond_to_friend_request(
+             conn.assigns.current_user.id,
+             request_id,
+             params["action"]
+           ) do
+      send_resp(conn, 200, Jason.encode!(result))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  delete "/friends/:friend_id" do
+    friend_id = conn.path_params["friend_id"]
+    user_id = conn.assigns.current_user.id
+
+    case FriendService.remove_friend(user_id, friend_id) do
+      {:ok, _} ->
+        send_resp(conn, 200, Jason.encode!(%{message: "friend_removed"}))
+
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/friends/block" do
+    with {:ok, params} <- validate_block_user_params(conn.body_params),
+         {:ok, _} <-
+           FriendService.block_user(
+             conn.assigns.current_user.id,
+             params["target_user_id"]
+           ) do
+      send_resp(conn, 200, Jason.encode!(%{message: "user_blocked"}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  delete "/friends/block/:blocked_user_id" do
+    blocked_user_id = conn.path_params["blocked_user_id"]
+    user_id = conn.assigns.current_user.id
+
+    case FriendService.unblock_user(user_id, blocked_user_id) do
+      {:ok, _} ->
+        send_resp(conn, 200, Jason.encode!(%{message: "user_unblocked"}))
+
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/friends/blocked" do
+    user_id = conn.assigns.current_user.id
+
+    case FriendService.get_blocked_users(user_id) do
+      {:ok, blocked_users} ->
+        send_resp(conn, 200, Jason.encode!(%{blocked_users: blocked_users}))
+
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/users/search" do
+    query = conn.query_params["q"]
+    limit = String.to_integer(conn.query_params["limit"] || "10")
+    user_id = conn.assigns.current_user.id
+
+    if query && String.length(query) >= 2 do
+      case FriendService.search_users(query, user_id, limit) do
+        {:ok, users} ->
+          send_resp(conn, 200, Jason.encode!(%{users: users}))
+
+        {:error, reason} ->
+          send_resp(conn, 500, Jason.encode!(%{error: reason}))
+      end
+    else
+      send_resp(conn, 400, Jason.encode!(%{error: "query_too_short"}))
+    end
+  end
+
+  # Call management endpoints
+  post "/calls" do
+    with {:ok, params} <- validate_call_params(conn.body_params),
+         {:ok, call} <-
+           CallService.initiate_call(
+             conn.assigns.current_user.id,
+             params["target_user_id"],
+             params["call_type"]
+           ) do
+      send_resp(conn, 201, Jason.encode!(%{call: call}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  put "/calls/:call_id/accept" do
+    call_id = conn.path_params["call_id"]
+    user_id = conn.assigns.current_user.id
+
+    case CallService.accept_call(call_id, user_id) do
+      {:ok, call} ->
+        send_resp(conn, 200, Jason.encode!(%{call: call}))
+
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  put "/calls/:call_id/reject" do
+    call_id = conn.path_params["call_id"]
+    user_id = conn.assigns.current_user.id
+
+    case CallService.reject_call(call_id, user_id) do
+      {:ok, call} ->
+        send_resp(conn, 200, Jason.encode!(%{call: call}))
+
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  put "/calls/:call_id/end" do
+    call_id = conn.path_params["call_id"]
+    user_id = conn.assigns.current_user.id
+
+    case CallService.end_call(call_id, user_id) do
+      {:ok, call} ->
+        send_resp(conn, 200, Jason.encode!(%{call: call}))
+
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/calls/:call_id/signal" do
+    call_id = conn.path_params["call_id"]
+    user_id = conn.assigns.current_user.id
+
+    with {:ok, params} <- validate_signal_params(conn.body_params),
+         {:ok, _} <-
+           CallService.handle_webrtc_signal(
+             call_id,
+             user_id,
+             params["signal"]
+           ) do
+      send_resp(conn, 200, Jason.encode!(%{message: "signal_sent"}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/calls/active" do
+    user_id = conn.assigns.current_user.id
+
+    case CallService.get_active_calls(user_id) do
+      {:ok, calls} ->
+        send_resp(conn, 200, Jason.encode!(%{calls: calls}))
+
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  # User settings endpoints
+  put "/settings" do
+    with {:ok, params} <- validate_settings_params(conn.body_params),
+         {:ok, user} <- update_user_settings(conn.assigns.current_user, params) do
+      send_resp(conn, 200, Jason.encode!(%{user: User.public_fields(user)}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/settings" do
+    user = conn.assigns.current_user
+
+    settings = %{
+      notification_settings: user.notification_settings,
+      privacy_settings: user.privacy_settings,
+      call_settings: user.call_settings,
+      theme_preference: user.theme_preference,
+      accent_color: user.accent_color
+    }
+
+    send_resp(conn, 200, Jason.encode!(%{settings: settings}))
+  end
+
+  # File upload endpoints
+  post "/upload/avatar" do
+    # This would handle file upload for avatars
+    # Implementation depends on your file storage solution (S3, local, etc.)
+    send_resp(conn, 501, Jason.encode!(%{error: "not_implemented"}))
+  end
+
+  post "/upload/banner" do
+    # This would handle file upload for profile banners
+    # Implementation depends on your file storage solution (S3, local, etc.)
+    send_resp(conn, 501, Jason.encode!(%{error: "not_implemented"}))
   end
 
   # Catch-all
@@ -295,22 +547,24 @@ defmodule Sup.ApiRouter do
     case Map.get(params, "text") do
       text when is_binary(text) ->
         result = %{"text" => text}
-        
+
         # Add optional parameters if present
-        result = if is_binary(Map.get(params, "room_id")) do
-          Map.put(result, "room_id", Map.get(params, "room_id"))
-        else
-          result
-        end
-        
-        result = if is_integer(Map.get(params, "limit")) do
-          Map.put(result, "limit", Map.get(params, "limit"))
-        else
-          result
-        end
-        
+        result =
+          if is_binary(Map.get(params, "room_id")) do
+            Map.put(result, "room_id", Map.get(params, "room_id"))
+          else
+            result
+          end
+
+        result =
+          if is_integer(Map.get(params, "limit")) do
+            Map.put(result, "limit", Map.get(params, "limit"))
+          else
+            result
+          end
+
         {:ok, result}
-      
+
       _ ->
         {:error, "invalid_params"}
     end
@@ -322,24 +576,89 @@ defmodule Sup.ApiRouter do
     case Map.get(params, "text") do
       text when is_binary(text) ->
         result = %{"text" => text}
-        
+
         # Add optional parameters if present
-        result = if is_binary(Map.get(params, "room_id")) do
-          Map.put(result, "room_id", Map.get(params, "room_id"))
-        else
-          result
-        end
-        
-        result = if is_integer(Map.get(params, "max_length")) do
-          Map.put(result, "max_length", Map.get(params, "max_length"))
-        else
-          result
-        end
-        
+        result =
+          if is_binary(Map.get(params, "room_id")) do
+            Map.put(result, "room_id", Map.get(params, "room_id"))
+          else
+            result
+          end
+
+        result =
+          if is_integer(Map.get(params, "max_length")) do
+            Map.put(result, "max_length", Map.get(params, "max_length"))
+          else
+            result
+          end
+
         {:ok, result}
-      
+
       _ ->
         {:error, "invalid_params"}
     end
+  end
+
+  defp validate_completion_params(_), do: {:error, "invalid_params"}
+
+  # Friend management validation helpers
+  defp validate_friend_request_params(%{"target_user_id" => target_user_id})
+       when is_binary(target_user_id) do
+    {:ok, %{"target_user_id" => target_user_id}}
+  end
+
+  defp validate_friend_request_params(_), do: {:error, "invalid_params"}
+
+  defp validate_friend_response_params(%{"action" => action})
+       when action in ["accept", "reject"] do
+    {:ok, %{"action" => action}}
+  end
+
+  defp validate_friend_response_params(_), do: {:error, "invalid_params"}
+
+  defp validate_block_user_params(%{"target_user_id" => target_user_id})
+       when is_binary(target_user_id) do
+    {:ok, %{"target_user_id" => target_user_id}}
+  end
+
+  defp validate_block_user_params(_), do: {:error, "invalid_params"}
+
+  # Call validation helpers
+  defp validate_call_params(%{"target_user_id" => target_user_id, "call_type" => call_type})
+       when is_binary(target_user_id) and call_type in ["voice", "video"] do
+    {:ok, %{"target_user_id" => target_user_id, "call_type" => call_type}}
+  end
+
+  defp validate_call_params(_), do: {:error, "invalid_params"}
+
+  defp validate_signal_params(%{"signal" => signal}) when is_map(signal) do
+    {:ok, %{"signal" => signal}}
+  end
+
+  defp validate_signal_params(_), do: {:error, "invalid_params"}
+
+  # Settings validation helpers
+  defp validate_settings_params(params) when is_map(params) do
+    allowed_fields = [
+      "display_name",
+      "bio",
+      "status_message",
+      "theme_preference",
+      "accent_color",
+      "activity_status",
+      "notification_settings",
+      "privacy_settings",
+      "call_settings"
+    ]
+
+    filtered_params = Map.take(params, allowed_fields)
+    {:ok, filtered_params}
+  end
+
+  defp validate_settings_params(_), do: {:error, "invalid_params"}
+
+  defp update_user_settings(user, params) do
+    changeset = User.changeset(user, params)
+    Sup.Repo.update(changeset)
   end
 end
