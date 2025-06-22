@@ -41,6 +41,15 @@ defmodule Sup.MixProject do
       {:argon2_elixir, "~> 3.1"},
       {:guardian, "~> 2.3"},
       {:comeonin, "~> 5.3"},
+      {:hammer, "~> 6.0"},
+      {:eqrcode, "~> 0.1.10"},
+      {:pot, "~> 1.0"},
+      {:ex_audit, "~> 0.9"},
+      {:secure_random, "~> 0.5"},
+      {:jose, "~> 1.11"},
+      {:telemetry, "~> 1.2"},
+      {:telemetry_metrics, "~> 0.6"},
+      {:telemetry_poller, "~> 1.0"},
 
       # JSON & Data processing
       {:jason, "~> 1.4"},
@@ -50,10 +59,6 @@ defmodule Sup.MixProject do
       # AI & Vector search
       {:nx, "~> 0.6"},
       {:scholar, "~> 0.2"},
-
-      # Monitoring & Observability
-      {:telemetry, "~> 1.2"},
-      {:telemetry_metrics, "~> 0.6"},
 
       # Development & Testing
       {:mix_test_watch, "~> 1.1", only: [:dev, :test], runtime: false},

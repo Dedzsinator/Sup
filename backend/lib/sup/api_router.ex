@@ -11,9 +11,12 @@ defmodule Sup.ApiRouter do
   alias Sup.Messaging.MessageService
   alias Sup.Voice.CallService
   alias Sup.Autocomplete.Service, as: AutocompleteService
+  alias Sup.Security.{RateLimitPlug, AuthorizationPlug, AuditLog}
 
   plug(:match)
+  plug(RateLimitPlug, limit_type: :api)
   plug(:authenticate)
+  plug(AuthorizationPlug)
   plug(:dispatch)
 
   # Room management

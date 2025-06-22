@@ -16,6 +16,10 @@ defmodule Sup.Application do
       # PubSub for real-time messaging
       {Phoenix.PubSub, name: Sup.PubSub},
 
+      # Security Services
+      Sup.Security.Monitor,
+      Sup.Security.MessageExpiry,
+
       # Core business logic supervisors
       Sup.Auth.Supervisor,
       Sup.Messaging.Supervisor,

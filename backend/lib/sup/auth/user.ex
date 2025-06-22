@@ -43,6 +43,14 @@ defmodule Sup.Auth.User do
     field(:two_factor_enabled, :boolean, default: false)
     field(:two_factor_secret, :string)
     field(:backup_codes, {:array, :string})
+    field(:role, :string, default: "user")
+    field(:account_locked, :boolean, default: false)
+    field(:locked_until, :utc_datetime)
+    field(:failed_login_attempts, :integer, default: 0)
+    field(:public_key, :string)
+    field(:private_key_hash, :string)
+    field(:session_id, :string)
+    field(:refresh_token_hash, :string)
 
     # Communication
     field(:push_token, :string)
@@ -71,7 +79,13 @@ defmodule Sup.Auth.User do
       :call_settings,
       :push_token,
       :is_online,
-      :last_seen
+      :last_seen,
+      :role,
+      :account_locked,
+      :locked_until,
+      :failed_login_attempts,
+      :public_key,
+      :session_id
     ])
     |> validate_format(:email, ~r/^[^\s]+@[^\s]+\.[^\s]+$/)
     |> validate_length(:username, min: 2, max: 32)
@@ -80,6 +94,7 @@ defmodule Sup.Auth.User do
     |> validate_length(:status_message, max: 128)
     |> validate_inclusion(:theme_preference, ["system", "light", "dark"])
     |> validate_inclusion(:activity_status, ["online", "away", "busy", "invisible"])
+    |> validate_inclusion(:role, ["admin", "moderator", "user", "guest"])
     |> unique_constraint(:email)
     |> unique_constraint(:username)
     |> unique_constraint(:friend_code)
@@ -133,7 +148,15 @@ defmodule Sup.Auth.User do
       :phone_verified,
       :two_factor_enabled,
       :two_factor_secret,
-      :backup_codes
+      :backup_codes,
+      :role,
+      :account_locked,
+      :locked_until,
+      :failed_login_attempts,
+      :public_key,
+      :private_key_hash,
+      :session_id,
+      :refresh_token_hash
     ])
   end
 

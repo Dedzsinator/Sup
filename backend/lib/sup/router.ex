@@ -5,13 +5,22 @@ defmodule Sup.Router do
 
   use Plug.Router
   require Logger
+  alias Sup.Security.{HeadersPlug, RateLimitPlug, Config}
 
   plug(Plug.Logger)
 
+  # Security headers
+  plug(HeadersPlug)
+
+  # Custom rate limiting for different endpoints
+  plug(:apply_rate_limiting)
+
   plug(CORSPlug,
-    origin: ["http://localhost:3000", "http://localhost:19006", "http://localhost:8081"],
-    headers: ["authorization", "content-type", "x-requested-with"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    origin: Config.cors_config().origin,
+    headers: Config.cors_config().headers,
+    methods: Config.cors_config().methods,
+    credentials: Config.cors_config().credentials,
+    max_age: Config.cors_config().max_age
   )
 
   plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
@@ -75,15 +84,14 @@ defmodule Sup.Router do
   # Public autocomplete endpoints (no auth required for demo)
   post "/autocomplete/suggest" do
     alias Sup.Autocomplete.Service, as: AutocompleteService
-    
+
     with {:ok, params} <- validate_autocomplete_params(conn.body_params),
-         {:ok, suggestions} <- AutocompleteService.get_suggestions(
-           params["text"],
-           [
+         {:ok, suggestions} <-
+           AutocompleteService.get_suggestions(
+             params["text"],
              user_id: Map.get(params, "user_id"),
              limit: Map.get(params, "max_suggestions", 5)
-           ]
-         ) do
+           ) do
       send_resp(conn, 200, Jason.encode!(suggestions))
     else
       {:error, reason} ->
@@ -93,10 +101,11 @@ defmodule Sup.Router do
 
   get "/autocomplete/health" do
     alias Sup.Autocomplete.Service, as: AutocompleteService
-    
+
     case AutocompleteService.health_check() do
       {:ok, status} ->
         send_resp(conn, 200, Jason.encode!(status))
+
       {:error, reason} ->
         send_resp(conn, 503, Jason.encode!(%{error: reason}))
     end
@@ -113,22 +122,22 @@ defmodule Sup.Router do
   # Helper function for autocomplete validation
   defp validate_autocomplete_params(params) when is_map(params) do
     text = Map.get(params, "text")
-    
+
     cond do
       is_nil(text) or text == "" ->
         {:error, "text_required"}
-      
+
       not is_binary(text) ->
         {:error, "text_must_be_string"}
-      
+
       String.length(text) > 500 ->
         {:error, "text_too_long"}
-      
+
       true ->
         {:ok, params}
     end
   end
-  
+
   defp validate_autocomplete_params(_), do: {:error, "invalid_params"}
 
   # Helper functions
@@ -149,4 +158,15 @@ defmodule Sup.Router do
   end
 
   defp validate_login_params(_), do: {:error, "invalid_params"}
+
+  # Custom rate limiting based on endpoint
+  defp apply_rate_limiting(conn, _opts) do
+    case conn.request_path do
+      path when path in ["/auth/login", "/auth/register"] ->
+        RateLimitPlug.call(conn, :auth)
+
+      _ ->
+        conn
+    end
+  end
 end
