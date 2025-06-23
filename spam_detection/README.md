@@ -1,34 +1,41 @@
-# Hyperoptimized Spam Detection Microservice
+# Enhanced Spam Detection System
 
 ## Overview
 
-This spam detection microservice provides advanced, hyperoptimized spam filtering for the Sup messaging application. It features:
+This enhanced spam detection system provides advanced ML-powered spam filtering with comprehensive preprocessing and multiple model types. The system has been recently cleaned up and reorganized for improved maintainability and performance.
 
 ### 🚀 **Key Features**
 
-1. **Non-Naive Bayes Classification**: Goes beyond traditional Naive Bayes by modeling feature dependencies
-2. **Custom User Word Spawn Vectors**: Learns user-specific patterns and vocabulary
-3. **Real-time Processing**: Sub-100ms response times for single message classification
-4. **Batch Processing**: Efficient handling of multiple messages simultaneously
-5. **Adaptive Learning**: Continuously improves from user feedback
-6. **High Availability**: Designed for production deployment with health monitoring
+1. **Enhanced ML Pipeline**: Comprehensive preprocessing with email parsing, TF-IDF, and linguistic analysis
+2. **Advanced Models**: Multiple Naive Bayes variants, ensemble methods, and semi-supervised learning
+3. **Real-time Processing**: FastAPI server with sub-100ms response times
+4. **Batch Processing**: Efficient handling of multiple messages simultaneously  
+5. **Rule-based Fallback**: Reliable spam detection even without trained ML models
+6. **Progress Tracking**: Comprehensive tqdm integration throughout training pipeline
+7. **Cross-validation**: 5-fold cross-validation with comprehensive evaluation
 
 ### 🏗️ **Architecture**
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Sup Backend   │───►│ Spam Detection   │───►│    ML Model     │
-│    (Elixir)     │    │   Microservice   │    │   (Python)      │
-│                 │◄───│    (FastAPI)     │◄───│                 │
+│   Client Apps   │───►│ Enhanced Spam    │───►│  ML Models +    │
+│                 │    │ Detection API    │    │ Rule Fallback   │
+│                 │◄───│   (FastAPI)      │◄───│                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-### 📊 **Algorithm Details**
+### 📊 **Enhanced ML Pipeline**
 
-#### Non-Naive Bayes Classifier
-- **Feature Correlation Matrix**: Models dependencies between features instead of assuming independence
-- **Temporal Decay**: Recent patterns weighted more heavily than older ones
-- **Confidence Weighting**: Adapts learning rate based on prediction confidence
+#### Data Sources
+- **Email Data**: 4,500 spam + 1,500 ham individual email files
+- **SMS Data**: 5,575 SMS messages from SMSSpamCollection  
+- **Text Files**: Additional training/test datasets
+
+#### Advanced Preprocessing
+- **Email Header Parsing**: Extract sender, subject, and metadata features
+- **Text Cleaning**: Advanced normalization and spam-specific feature extraction
+- **TF-IDF + N-grams**: Comprehensive feature engineering with unigrams and bigrams
+- **Linguistic Features**: Word count, caps ratio, punctuation analysis, spam keywords
 
 #### Custom User Word Spawn Vectors
 - **User-Specific Learning**: Each user has their own vocabulary patterns
@@ -280,5 +287,19 @@ Complete API documentation is available at `/docs` when the server is running, p
    ```bash
    docker build -t spam-detection:latest .
    ```
+
+## 🧹 **Recent Cleanup & Enhancements**
+
+**✅ The project has been recently cleaned up and enhanced (June 2025):**
+
+- **Removed obsolete files**: Eliminated unused `trainer.py`, `classifier.py`, `simple_server.py` and log files
+- **Enhanced ML pipeline**: New `enhanced_trainer.py` with semi-supervised learning and cross-validation
+- **Advanced preprocessing**: Comprehensive `enhanced_preprocessor.py` with email parsing and linguistic features
+- **Modernized server**: New `server.py` with enhanced API and rule-based fallback
+- **Progress tracking**: tqdm integration throughout all training operations
+- **Updated tests**: New test suite compatible with enhanced components
+- **Clean structure**: Organized, maintainable codebase focused on ML excellence
+
+See `CLEANUP_SUMMARY.md` for detailed cleanup information.
 
 This spam detection microservice provides a production-ready, scalable solution for protecting the Sup messaging platform from spam while maintaining high performance and user experience.
