@@ -266,6 +266,8 @@ class AdvancedSpamClassifier:
                 continue
             
             try:
+                if TQDM_AVAILABLE:
+                    print(f"  🤖 Starting {model_name} training...")
                 logger.info(f"Training {model_name}...")
                 
                 # Handle different data requirements
@@ -275,10 +277,22 @@ class AdvancedSpamClassifier:
                 else:
                     X_train = X_labeled
                 
-                # Train model
+                if TQDM_AVAILABLE:
+                    print(f"  📊 Data shape for {model_name}: {X_train.shape}")
+                
+                # Train model with progress indication
+                if TQDM_AVAILABLE:
+                    print(f"  ⚙️  Fitting {model_name}...")
+                
                 self.models[model_name].fit(X_train, y_labeled)
                 
+                if TQDM_AVAILABLE:
+                    print(f"  ✅ {model_name} training completed!")
+                
                 # Evaluate
+                if TQDM_AVAILABLE:
+                    print(f"  📈 Evaluating {model_name}...")
+                    
                 y_pred = self.models[model_name].predict(X_train)
                 y_pred_proba = None
                 if hasattr(self.models[model_name], 'predict_proba'):
@@ -375,6 +389,8 @@ class AdvancedSpamClassifier:
                 continue
             
             try:
+                if TQDM_AVAILABLE:
+                    print(f"  🔄 Cross-validating {model_name}...")
                 logger.info(f"Cross-validating {model_name}...")
                 
                 model = self.models[model_name]
@@ -385,13 +401,22 @@ class AdvancedSpamClassifier:
                 else:
                     X_cv = X_labeled
                 
+                if TQDM_AVAILABLE:
+                    print(f"  📊 CV data shape for {model_name}: {X_cv.shape}")
+                
                 # Perform cross-validation
+                if TQDM_AVAILABLE:
+                    print(f"  ⏳ Running {cv}-fold cross-validation for {model_name}...")
+                    
                 cv_scores = cross_val_score(
                     model, X_cv, y_labeled, 
                     cv=StratifiedKFold(n_splits=cv, shuffle=True, random_state=self.random_state),
                     scoring=scoring,
                     n_jobs=-1
                 )
+                
+                if TQDM_AVAILABLE:
+                    print(f"  ✅ {model_name} cross-validation completed!")
                 
                 cv_results[model_name] = {
                     'mean': np.mean(cv_scores),
