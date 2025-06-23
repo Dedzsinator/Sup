@@ -210,6 +210,13 @@ defmodule Sup.Room.RoomService do
     end
   end
 
+  def can_access_room?(user_id, room_id) do
+    case Repo.get_by(RoomMember, user_id: user_id, room_id: room_id) do
+      nil -> false
+      _member -> true
+    end
+  end
+
   def is_room_admin?(user_id, room_id) do
     case Repo.get_by(RoomMember, user_id: user_id, room_id: room_id) do
       %RoomMember{role: :admin} -> true

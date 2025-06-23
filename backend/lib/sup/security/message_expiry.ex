@@ -1,4 +1,4 @@
-defmodule Sup.Security.MessageExpiry do
+defmodule Sup.Security.MessageExpiryService do
   @moduledoc """
   Simplified message expiry and auto-deletion system for enhanced privacy.
   """

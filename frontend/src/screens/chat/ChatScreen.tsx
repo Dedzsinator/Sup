@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { RouteProp } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -9,21 +10,44 @@ import { useTheme, colors, Spacing } from '../../theme';
 import { ChatStackParamList } from '../../navigation/MainNavigator';
 import { Message } from '../../types';
 import ModernCard from '../../components/ModernCard';
+import { 
+  EnhancedMessage, 
+  EmojiPicker, 
+  OfflineQueueIndicator,
+  RichMediaUpload
+} from '../../components';
 
 type ChatScreenRouteProp = RouteProp<ChatStackParamList, 'Chat'>;
+type ChatScreenNavigationProp = StackNavigationProp<ChatStackParamList, 'Chat'>;
 
 interface Props {
     route: ChatScreenRouteProp;
+    navigation: ChatScreenNavigationProp;
 }
 
 const { width } = Dimensions.get('window');
 
-export default function ChatScreen({ route }: Props) {
+export default function ChatScreen({ route, navigation }: Props) {
     const { room } = route.params;
-    const { messages, sendMessage, startTyping, stopTyping, setCurrentRoom } = useChatStore();
+    const { 
+        messages, 
+        sendMessage, 
+        startTyping, 
+        stopTyping, 
+        setCurrentRoom,
+        replyingToMessage,
+        setReplyingToMessage,
+        editingMessage,
+        setEditingMessage,
+        offlineMessages,
+        messageThreads,
+        loadThread
+    } = useChatStore();
     const { user } = useAuthStore();
     const [messageText, setMessageText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showMediaUpload, setShowMediaUpload] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const theme = useTheme();
 
@@ -35,8 +59,21 @@ export default function ChatScreen({ route }: Props) {
 
     useEffect(() => {
         setCurrentRoomCallback(room);
+        
+        // Set up navigation header with room settings button
+        navigation.setOptions({
+            headerRight: () => (
+                <TouchableOpacity
+                    style={{ marginRight: 16 }}
+                    onPress={() => navigation.navigate('RoomSettings', { room })}
+                >
+                    <Ionicons name="settings-outline" size={24} color={theme.colors.primary} />
+                </TouchableOpacity>
+            ),
+        });
+        
         return () => setCurrentRoomCallback(null);
-    }, [room, setCurrentRoomCallback]);
+    }, [room, setCurrentRoomCallback, navigation, theme.colors.primary]);
 
     useEffect(() => {
         // Scroll to bottom when new messages arrive
@@ -49,8 +86,10 @@ export default function ChatScreen({ route }: Props) {
 
     const handleSendMessage = () => {
         if (messageText.trim()) {
-            sendMessage(room.id, messageText.trim());
+            const replyToId = replyingToMessage?.id;
+            sendMessage(room.id, messageText.trim(), 'text', replyToId);
             setMessageText('');
+            setReplyingToMessage(null);
             handleStopTyping();
         }
     };
@@ -74,97 +113,91 @@ export default function ChatScreen({ route }: Props) {
     };
 
     const handleAttachment = () => {
-        Alert.alert(
-            'Attachments',
-            'Choose attachment type',
-            [
-                { text: 'Camera', onPress: () => console.log('Camera selected') },
-                { text: 'Gallery', onPress: () => console.log('Gallery selected') },
-                { text: 'File', onPress: () => console.log('File selected') },
-                { text: 'Cancel', style: 'cancel' },
-            ]
-        );
+        setShowMediaUpload(true);
     };
 
-    const formatTimestamp = (timestamp: string): string => {
-        const date = new Date(timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const handleEmojiSelect = (emoji: string) => {
+        setMessageText(prev => prev + emoji);
+        setShowEmojiPicker(false);
+    };
+
+    const handleMediaUpload = (url: string, type: string, metadata?: any) => {
+        // Handle media upload - send as message
+        console.log('Media upload:', { url, type, metadata });
+        setShowMediaUpload(false);
     };
 
     const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-        const isOwn = item.sender_id === user?.id;
-        const prevMessage = index > 0 ? roomMessages[index - 1] : null;
-        const nextMessage = index < roomMessages.length - 1 ? roomMessages[index + 1] : null;
-
-        const showAvatar = !prevMessage || prevMessage.sender_id !== item.sender_id;
-        const isLastInGroup = !nextMessage || nextMessage.sender_id !== item.sender_id;
-
         return (
-            <View style={[
-                styles.messageContainer,
-                isOwn ? styles.ownMessageContainer : styles.otherMessageContainer,
-                { marginBottom: isLastInGroup ? Spacing.md : Spacing.xs }
-            ]}>
-                {/* Avatar for other users */}
-                {!isOwn && showAvatar && (
-                    <View style={[styles.avatarContainer, { backgroundColor: colors.secondary[200] }]}>
-                        <Text style={[styles.avatarText, { color: colors.secondary[700] }]}>
-                            {item.sender?.username?.substring(0, 2).toUpperCase() || 'U'}
-                        </Text>
-                    </View>
-                )}
-
-                {/* Spacer when avatar is not shown */}
-                {!isOwn && !showAvatar && <View style={styles.avatarSpacer} />}
-
-                {/* Message Bubble */}
-                <View style={[
-                    styles.messageBubble,
-                    isOwn ? styles.ownMessageBubble : styles.otherMessageBubble,
-                    { backgroundColor: isOwn ? colors.primary[500] : theme.colors.surface }
-                ]}>
-                    {/* Sender name for group chats */}
-                    {!isOwn && showAvatar && room.type !== 'direct_message' && (
-                        <Text style={[styles.senderName, { color: colors.primary[600] }]}>
-                            {item.sender?.username || 'Unknown'}
-                        </Text>
-                    )}
-
-                    {/* Message content */}
-                    <Text style={[
-                        styles.messageText,
-                        { color: isOwn ? 'white' : theme.colors.onSurface }
-                    ]}>
-                        {item.content}
-                    </Text>
-
-                    {/* Timestamp and status */}
-                    <View style={styles.messageFooter}>
-                        <Text style={[
-                            styles.timestamp,
-                            { color: isOwn ? 'rgba(255,255,255,0.7)' : theme.colors.onSurfaceVariant }
-                        ]}>
-                            {formatTimestamp(item.inserted_at)}
-                        </Text>
-
-                        {/* Delivery status for own messages */}
-                        {isOwn && (
-                            <View style={styles.statusContainer}>
-                                <Ionicons
-                                    name={item.delivery_status === 'read' ? 'checkmark-done' : 'checkmark'}
-                                    size={16}
-                                    color={item.delivery_status === 'read' ? colors.accent[300] : 'rgba(255,255,255,0.7)'}
-                                />
-                            </View>
-                        )}
-                    </View>
-                </View>
-            </View>
+            <EnhancedMessage
+                message={item}
+                currentUser={user!}
+                onReply={() => setReplyingToMessage(item)}
+                onEdit={() => setEditingMessage(item)}
+                onThread={async () => {
+                    // Load thread and then navigate
+                    try {
+                        await loadThread(item.id);
+                        const thread = messageThreads[item.id];
+                        if (thread) {
+                            navigation.navigate('ThreadView', { thread });
+                        }
+                    } catch (error) {
+                        console.error('Failed to load thread:', error);
+                    }
+                }}
+            />
         );
     };
 
     const renderInputBar = () => (
         <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface }]}>
+            {/* Reply indicator */}
+            {replyingToMessage && (
+                <View style={[styles.replyIndicator, { backgroundColor: theme.colors.surfaceVariant }]}>
+                    <View style={styles.replyContent}>
+                        <Text style={[styles.replyLabel, { color: theme.colors.onSurfaceVariant }]}>
+                            Replying to {replyingToMessage.sender?.username || 'Unknown'}
+                        </Text>
+                        <Text 
+                            style={[styles.replyText, { color: theme.colors.onSurface }]}
+                            numberOfLines={1}
+                        >
+                            {replyingToMessage.content}
+                        </Text>
+                    </View>
+                    <TouchableOpacity 
+                        onPress={() => setReplyingToMessage(null)}
+                        style={styles.replyClose}
+                    >
+                        <Ionicons name="close" size={20} color={theme.colors.onSurfaceVariant} />
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Edit indicator */}
+            {editingMessage && (
+                <View style={[styles.editIndicator, { backgroundColor: colors.primary[100] }]}>
+                    <View style={styles.replyContent}>
+                        <Text style={[styles.replyLabel, { color: colors.primary[600] }]}>
+                            Editing message
+                        </Text>
+                        <Text 
+                            style={[styles.replyText, { color: theme.colors.onSurface }]}
+                            numberOfLines={1}
+                        >
+                            {editingMessage.content}
+                        </Text>
+                    </View>
+                    <TouchableOpacity 
+                        onPress={() => setEditingMessage(null)}
+                        style={styles.replyClose}
+                    >
+                        <Ionicons name="close" size={20} color={colors.primary[600]} />
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <ModernCard
                 variant="elevated"
                 padding="sm"
@@ -183,7 +216,7 @@ export default function ChatScreen({ route }: Props) {
                     {/* Text input */}
                     <TextInput
                         style={styles.textInput}
-                        placeholder="Type a message..."
+                        placeholder={editingMessage ? "Edit message..." : "Type a message..."}
                         value={messageText}
                         onChangeText={handleTextChange}
                         onBlur={handleStopTyping}
@@ -195,6 +228,14 @@ export default function ChatScreen({ route }: Props) {
                         contentStyle={styles.textInputContent}
                         mode="flat"
                     />
+
+                    {/* Emoji button */}
+                    <TouchableOpacity
+                        style={[styles.emojiButton, { backgroundColor: colors.secondary[100] }]}
+                        onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+                    >
+                        <Ionicons name="happy" size={20} color={colors.secondary[600]} />
+                    </TouchableOpacity>
 
                     {/* Send button */}
                     <TouchableOpacity
@@ -211,7 +252,7 @@ export default function ChatScreen({ route }: Props) {
                         activeOpacity={0.7}
                     >
                         <Ionicons
-                            name="send"
+                            name={editingMessage ? "checkmark" : "send"}
                             size={18}
                             color={messageText.trim() ? 'white' : theme.colors.onSurfaceVariant}
                         />
@@ -221,12 +262,24 @@ export default function ChatScreen({ route }: Props) {
         </View>
     );
 
+    const renderOfflineIndicator = () => (
+        <OfflineQueueIndicator 
+            onPress={() => {
+                // Handle offline queue tap
+                console.log('Offline queue tapped');
+            }}
+        />
+    );
+
     return (
         <KeyboardAvoidingView
             style={[styles.container, { backgroundColor: theme.colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
         >
+            {/* Offline queue indicator */}
+            {offlineMessages.length > 0 && renderOfflineIndicator()}
+
             {/* Messages List */}
             <FlatList
                 ref={flatListRef}
@@ -243,6 +296,26 @@ export default function ChatScreen({ route }: Props) {
 
             {/* Input Bar */}
             {renderInputBar()}
+
+            {/* Emoji Picker Modal */}
+            {showEmojiPicker && (
+                <EmojiPicker
+                    visible={showEmojiPicker}
+                    onEmojiSelect={handleEmojiSelect}
+                    onClose={() => setShowEmojiPicker(false)}
+                    roomId={room.id}
+                />
+            )}
+
+            {/* Media Upload Modal */}
+            {showMediaUpload && (
+                <RichMediaUpload
+                    visible={showMediaUpload}
+                    onMediaSelected={handleMediaUpload}
+                    onClose={() => setShowMediaUpload(false)}
+                    roomId={room.id}
+                />
+            )}
         </KeyboardAvoidingView>
     );
 }
@@ -339,6 +412,15 @@ const styles = StyleSheet.create({
         marginRight: Spacing.sm,
         marginBottom: 4,
     },
+    emojiButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: Spacing.sm,
+        marginBottom: 4,
+    },
     textInput: {
         flex: 1,
         maxHeight: 120,
@@ -357,5 +439,34 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginLeft: Spacing.sm,
         marginBottom: 4,
+    },
+    replyIndicator: {
+        padding: Spacing.sm,
+        marginBottom: Spacing.xs,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    editIndicator: {
+        padding: Spacing.sm,
+        marginBottom: Spacing.xs,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    replyContent: {
+        flex: 1,
+    },
+    replyLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    replyText: {
+        fontSize: 14,
+        opacity: 0.8,
+    },
+    replyClose: {
+        padding: 4,
     },
 });

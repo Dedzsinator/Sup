@@ -34,6 +34,23 @@ defmodule Sup.ScyllaDB do
     GenServer.call(__MODULE__, {:delete_message, message_id})
   end
 
+  # Thread support functions
+  def get_thread_messages(thread_id, limit \\ 50, before_timestamp \\ nil) do
+    GenServer.call(__MODULE__, {:get_thread_messages, thread_id, limit, before_timestamp})
+  end
+
+  def count_thread_messages(thread_id) do
+    GenServer.call(__MODULE__, {:count_thread_messages, thread_id})
+  end
+
+  def get_thread_participants(thread_id) do
+    GenServer.call(__MODULE__, {:get_thread_participants, thread_id})
+  end
+
+  def search_mentions(user_id, room_ids, limit \\ 20) do
+    GenServer.call(__MODULE__, {:search_mentions, user_id, room_ids, limit})
+  end
+
   # GenServer callbacks
   @impl true
   def init(_opts) do
@@ -263,6 +280,119 @@ defmodule Sup.ScyllaDB do
     end
   end
 
+  def handle_call({:get_thread_messages, thread_id, limit, before_timestamp}, _from, state) do
+    {query, params} = if before_timestamp do
+      query = """
+      SELECT id, room_id, sender_id, content, type, timestamp, reply_to_id
+      FROM #{state.keyspace}.thread_messages
+      WHERE thread_id = ? AND timestamp < ?
+      ORDER BY timestamp DESC
+      LIMIT ?
+      """
+      {query, [thread_id, before_timestamp, limit]}
+    else
+      query = """
+      SELECT id, room_id, sender_id, content, type, timestamp, reply_to_id
+      FROM #{state.keyspace}.thread_messages
+      WHERE thread_id = ?
+      ORDER BY timestamp DESC
+      LIMIT ?
+      """
+      {query, [thread_id, limit]}
+    end
+
+    case Xandra.Cluster.execute(state.cluster, query, params) do
+      {:ok, %Xandra.Page{} = page} ->
+        messages =
+          Enum.map(page, fn row ->
+            %{
+              id: row["id"],
+              room_id: row["room_id"],
+              sender_id: row["sender_id"],
+              content: row["content"],
+              type: String.to_existing_atom(row["type"]),
+              timestamp: row["timestamp"],
+              reply_to_id: row["reply_to_id"]
+            }
+          end)
+
+        {:reply, {:ok, messages}, state}
+
+      {:error, reason} ->
+        Logger.error("Failed to get thread messages: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:count_thread_messages, thread_id}, _from, state) do
+    query = """
+    SELECT COUNT(*) as count
+    FROM #{state.keyspace}.thread_messages
+    WHERE thread_id = ?
+    """
+
+    case Xandra.Cluster.execute(state.cluster, query, [thread_id]) do
+      {:ok, %Xandra.Page{} = page} ->
+        count = Enum.at(page, 0)["count"] || 0
+        {:reply, {:ok, count}, state}
+
+      {:error, reason} ->
+        Logger.error("Failed to count thread messages: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:get_thread_participants, thread_id}, _from, state) do
+    query = """
+    SELECT DISTINCT sender_id
+    FROM #{state.keyspace}.thread_messages
+    WHERE thread_id = ?
+    """
+
+    case Xandra.Cluster.execute(state.cluster, query, [thread_id]) do
+      {:ok, %Xandra.Page{} = page} ->
+        participants = Enum.map(page, fn row -> row["sender_id"] end)
+        {:reply, {:ok, participants}, state}
+
+      {:error, reason} ->
+        Logger.error("Failed to get thread participants: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:search_mentions, user_id, room_ids, limit}, _from, state) do
+    query = """
+    SELECT id, room_id, sender_id, content, type, timestamp
+    FROM #{state.keyspace}.messages
+    WHERE room_id IN ? AND content LIKE ?
+    ORDER BY timestamp DESC
+    LIMIT ?
+    """
+
+    mention_pattern = "%@#{user_id}%"
+
+    case Xandra.Cluster.execute(state.cluster, query, [room_ids, mention_pattern, limit]) do
+      {:ok, %Xandra.Page{} = page} ->
+        messages =
+          Enum.map(page, fn row ->
+            %{
+              id: row["id"],
+              room_id: row["room_id"],
+              sender_id: row["sender_id"],
+              content: row["content"],
+              type: String.to_existing_atom(row["type"]),
+              timestamp: row["timestamp"]
+            }
+          end)
+
+        {:reply, {:ok, messages}, state}
+
+      {:error, reason} ->
+        Logger.error("Failed to search mentions: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
   # Private functions
   defp setup_keyspace_and_tables(cluster, keyspace) do
     # Create keyspace
@@ -308,6 +438,23 @@ defmodule Sup.ScyllaDB do
     """
 
     Xandra.Cluster.execute(cluster, create_room_messages_table)
+
+    # Create thread_messages table (for threaded conversations)
+    create_thread_messages_table = """
+    CREATE TABLE IF NOT EXISTS #{keyspace}.thread_messages (
+      thread_id UUID,
+      timestamp TIMESTAMP,
+      id UUID,
+      room_id UUID,
+      sender_id UUID,
+      content TEXT,
+      type TEXT,
+      reply_to_id UUID,
+      PRIMARY KEY (thread_id, timestamp, id)
+    ) WITH CLUSTERING ORDER BY (timestamp DESC)
+    """
+
+    Xandra.Cluster.execute(cluster, create_thread_messages_table)
 
     Logger.info("ScyllaDB keyspace and tables created/verified")
   end

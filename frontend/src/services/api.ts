@@ -7,7 +7,15 @@ import {
   UpdateSettingsRequest,
   Call,
   FriendRequest,
-  UserSettings
+  UserSettings,
+  Room,
+  Message,
+  CreateRoomRequest,
+  SendMessageRequest,
+  MessageThread,
+  MessageReaction,
+  CustomEmoji,
+  OfflineMessage
 } from '../types';
 
 const API_BASE_URL = __DEV__ ? 'http://localhost:4000' : 'https://your-production-url.com';
@@ -369,6 +377,228 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // Room management methods
+  async getRooms(): Promise<ApiResponse<{ rooms: Room[] }>> {
+    return this.request('/api/rooms');
+  }
+
+  async createRoom(params: CreateRoomRequest): Promise<ApiResponse<Room>> {
+    return this.request('/api/rooms', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getRoom(roomId: string): Promise<ApiResponse<Room>> {
+    return this.request(`/api/rooms/${roomId}`);
+  }
+
+  async joinRoom(roomId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/rooms/${roomId}/join`, {
+      method: 'POST',
+    });
+  }
+
+  async leaveRoom(roomId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/rooms/${roomId}/leave`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateRoom(roomId: string, updates: Partial<CreateRoomRequest>): Promise<ApiResponse<Room>> {
+    return this.request(`/api/rooms/${roomId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteRoom(roomId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/rooms/${roomId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Message management methods
+  async getRoomMessages(roomId: string, limit = 50, before?: string): Promise<ApiResponse<{ messages: Message[] }>> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      ...(before && { before }),
+    });
+
+    return this.request(`/api/rooms/${roomId}/messages?${params}`);
+  }
+
+  async sendMessage(params: SendMessageRequest): Promise<ApiResponse<Message>> {
+    return this.request('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async editMessage(messageId: string, content: string): Promise<ApiResponse<Message>> {
+    return this.request(`/api/messages/${messageId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async deleteMessage(messageId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/messages/${messageId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async searchMessages(query: string, roomId?: string, limit = 20): Promise<ApiResponse<{ messages: Message[] }>> {
+    const params = new URLSearchParams({
+      q: query,
+      limit: limit.toString(),
+      ...(roomId && { room_id: roomId }),
+    });
+
+    return this.request(`/api/messages/search?${params}`);
+  }
+
+  // Message reactions
+  async addReaction(messageId: string, emoji: string): Promise<ApiResponse<MessageReaction>> {
+    return this.request(`/api/messages/${messageId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
+    });
+  }
+
+  async removeReaction(messageId: string, emoji: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/messages/${messageId}/reactions/${emoji}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getMessageReactions(messageId: string): Promise<ApiResponse<{ reactions: MessageReaction[] }>> {
+    return this.request(`/api/messages/${messageId}/reactions`);
+  }
+
+  // Thread management
+  async getThread(messageId: string): Promise<ApiResponse<MessageThread>> {
+    return this.request(`/api/messages/${messageId}/thread`);
+  }
+
+  async getThreadMessages(messageId: string, limit = 50, before?: string): Promise<ApiResponse<{ messages: Message[] }>> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      ...(before && { before }),
+    });
+
+    return this.request(`/api/messages/${messageId}/thread/messages?${params}`);
+  }
+
+  async replyToThread(messageId: string, content: string, type = 'text'): Promise<ApiResponse<Message>> {
+    return this.request(`/api/messages/${messageId}/thread/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ content, type }),
+    });
+  }
+
+  // Custom emoji management
+  async getRoomEmojis(roomId: string): Promise<ApiResponse<{ emojis: CustomEmoji[] }>> {
+    return this.request(`/api/rooms/${roomId}/emojis`);
+  }
+
+  async getGlobalEmojis(): Promise<ApiResponse<{ emojis: CustomEmoji[] }>> {
+    return this.request('/api/emojis/global');
+  }
+
+  async createCustomEmoji(roomId: string, name: string, imageUrl: string, tags?: string[]): Promise<ApiResponse<CustomEmoji>> {
+    return this.request(`/api/rooms/${roomId}/emojis`, {
+      method: 'POST',
+      body: JSON.stringify({ name, image_url: imageUrl, tags }),
+    });
+  }
+
+  async deleteCustomEmoji(roomId: string, emojiId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/rooms/${roomId}/emojis/${emojiId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async searchEmojis(query: string, roomId?: string): Promise<ApiResponse<{ emojis: CustomEmoji[] }>> {
+    const params = new URLSearchParams({
+      q: query,
+      ...(roomId && { room_id: roomId }),
+    });
+
+    return this.request(`/api/emojis/search?${params}`);
+  }
+
+  // Offline message management
+  async getOfflineMessages(): Promise<ApiResponse<{ messages: OfflineMessage[] }>> {
+    return this.request('/api/messages/offline');
+  }
+
+  async markOfflineMessagesReceived(messageIds: string[]): Promise<ApiResponse<{ message: string }>> {
+    return this.request('/api/messages/offline/received', {
+      method: 'POST',
+      body: JSON.stringify({ message_ids: messageIds }),
+    });
+  }
+
+  // Analytics and insights
+  async getMessageAnalytics(roomId?: string, period = '7d'): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams({
+      period,
+      ...(roomId && { room_id: roomId }),
+    });
+
+    return this.request(`/api/analytics/messages?${params}`);
+  }
+
+  async getRoomInsights(roomId: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/analytics/rooms/${roomId}/insights`);
+  }
+
+  // Rich media upload
+  async uploadMedia(file: File, roomId: string, type: 'image' | 'video' | 'audio' | 'file'): Promise<ApiResponse<{ url: string, metadata?: any }>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    formData.append('room_id', roomId);
+
+    const response = await fetch(`${this.baseURL}/api/upload/media`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload media: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  }
+
+  // Multi-device sync
+  async syncDeviceState(): Promise<ApiResponse<any>> {
+    return this.request('/api/sync/device-state');
+  }
+
+  async registerDevice(deviceInfo: any): Promise<ApiResponse<{ device_id: string }>> {
+    return this.request('/api/sync/devices', {
+      method: 'POST',
+      body: JSON.stringify(deviceInfo),
+    });
+  }
+
+  async getDevices(): Promise<ApiResponse<{ devices: any[] }>> {
+    return this.request('/api/sync/devices');
+  }
+
+  async removeDevice(deviceId: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/sync/devices/${deviceId}`, {
+      method: 'DELETE',
+    });
   }
 }
 

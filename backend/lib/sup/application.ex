@@ -20,6 +20,11 @@ defmodule Sup.Application do
       Sup.Security.Monitor,
       Sup.Security.MessageExpiry,
 
+      # Enhanced Services
+      Sup.Messaging.OfflineQueueService,
+      Sup.Analytics.AnalyticsService,
+      Sup.Sync.MultiDeviceSyncService,
+
       # Core business logic supervisors
       Sup.Auth.Supervisor,
       Sup.Messaging.Supervisor,

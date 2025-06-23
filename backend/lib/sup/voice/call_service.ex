@@ -7,7 +7,9 @@ defmodule Sup.Voice.CallService do
   alias Sup.Repo
   import Ecto.Query
 
-  def initiate_call(caller_id, opts \\ []) do
+  # Call initiation functions
+  def initiate_call(caller_id, opts \\ [])
+  def initiate_call(caller_id, opts) when is_list(opts) do
     room_id = Keyword.get(opts, :room_id)
     call_type = Keyword.get(opts, :type, :voice)
     participants = Keyword.get(opts, :participants, [])
@@ -35,6 +37,15 @@ defmodule Sup.Voice.CallService do
     end
   end
 
+  # Additional overload for initiate_call/2 and initiate_call/3 
+  def initiate_call(caller_id, room_id) when is_binary(room_id) do
+    initiate_call(caller_id, room_id: room_id)
+  end
+
+  def initiate_call(caller_id, room_id, call_type) when is_binary(room_id) do
+    initiate_call(caller_id, room_id: room_id, type: call_type)
+  end
+
   def answer_call(call_id, user_id) do
     case get_call(call_id) do
       nil ->
@@ -59,6 +70,16 @@ defmodule Sup.Voice.CallService do
           {:error, "not_participant"}
         end
     end
+  end
+
+  # Alias for answer_call for consistency
+  def accept_call(call_id, user_id) do
+    answer_call(call_id, user_id)
+  end
+
+  # Alias for decline_call
+  def reject_call(call_id, user_id) do
+    decline_call(call_id, user_id)
   end
 
   def decline_call(call_id, user_id) do
@@ -242,6 +263,35 @@ defmodule Sup.Voice.CallService do
 
   def add_ice_candidate(call_id, user_id, candidate) do
     broadcast_signaling(call_id, user_id, :ice_candidate, candidate)
+  end
+
+  # Handle WebRTC signaling data
+  def handle_webrtc_signal(call_id, user_id, signal_data) do
+    case signal_data do
+      %{"type" => "offer", "sdp" => sdp} ->
+        create_webrtc_offer(call_id, user_id, %{sdp: sdp})
+
+      %{"type" => "answer", "sdp" => sdp} ->
+        create_webrtc_answer(call_id, user_id, %{sdp: sdp})
+
+      %{"type" => "ice-candidate"} = candidate ->
+        add_ice_candidate(call_id, user_id, candidate)
+
+      _ ->
+        require Logger
+        Logger.warning("Unknown WebRTC signal type: #{inspect(signal_data)}")
+        {:error, "unknown_signal_type"}
+    end
+  end
+
+  # Get active calls for a user
+  def get_active_calls(user_id) do
+    from(c in Call,
+      where: ^user_id in c.participants and c.status in [:connecting, :active],
+      order_by: [desc: c.started_at]
+    )
+    |> Repo.all()
+    |> Enum.map(&Call.public_fields/1)
   end
 
   defp broadcast_call_event(call, event, additional_data \\ nil) do

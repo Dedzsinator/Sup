@@ -8,7 +8,7 @@ defmodule Sup.ApiRouter do
 
   alias Sup.Auth.{Guardian, User, FriendService}
   alias Sup.Room.RoomService
-  alias Sup.Messaging.MessageService
+  alias Sup.Messaging.{MessageService, EnhancedMessageService, MessageReaction, MessageThread, CustomEmojiService, OfflineQueueService, AnalyticsService, RichMediaService, MultiDeviceSyncService}
   alias Sup.Voice.CallService
   alias Sup.Autocomplete.Service, as: AutocompleteService
   alias Sup.Security.{RateLimitPlug, AuthorizationPlug, AuditLog}
@@ -478,6 +478,306 @@ defmodule Sup.ApiRouter do
     send_resp(conn, 501, Jason.encode!(%{error: "not_implemented"}))
   end
 
+  post "/upload/media" do
+    # Handle rich media uploads
+    send_resp(conn, 501, Jason.encode!(%{error: "not_implemented"}))
+  end
+
+  # Message Management Endpoints
+  post "/messages" do
+    with {:ok, params} <- validate_send_message_params(conn.body_params),
+         {:ok, message} <- EnhancedMessageService.send_message(conn.assigns.current_user.id, params) do
+      send_resp(conn, 201, Jason.encode!(%{message: message}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  put "/messages/:message_id" do
+    message_id = conn.path_params["message_id"]
+    user_id = conn.assigns.current_user.id
+    
+    with {:ok, params} <- validate_edit_message_params(conn.body_params),
+         {:ok, message} <- EnhancedMessageService.edit_message(message_id, user_id, params["content"]) do
+      send_resp(conn, 200, Jason.encode!(%{message: message}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  delete "/messages/:message_id" do
+    message_id = conn.path_params["message_id"]
+    user_id = conn.assigns.current_user.id
+    
+    case EnhancedMessageService.delete_message(message_id, user_id) do
+      :ok ->
+        send_resp(conn, 200, Jason.encode!(%{message: "message_deleted"}))
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/messages/search" do
+    query = conn.query_params["q"]
+    room_id = conn.query_params["room_id"]
+    limit = String.to_integer(conn.query_params["limit"] || "20")
+    user_id = conn.assigns.current_user.id
+
+    if query && String.length(query) >= 3 do
+      case MessageService.search_messages(user_id, query, limit) do
+        {:ok, messages} ->
+          send_resp(conn, 200, Jason.encode!(%{messages: messages}))
+        {:error, reason} ->
+          send_resp(conn, 500, Jason.encode!(%{error: reason}))
+      end
+    else
+      send_resp(conn, 400, Jason.encode!(%{error: "query_too_short"}))
+    end
+  end
+
+  # Message Reactions
+  post "/messages/:message_id/reactions" do
+    message_id = conn.path_params["message_id"]
+    user_id = conn.assigns.current_user.id
+    
+    with {:ok, params} <- validate_reaction_params(conn.body_params),
+         {:ok, reaction} <- EnhancedMessageService.add_reaction(message_id, user_id, params["emoji"]) do
+      send_resp(conn, 201, Jason.encode!(%{reaction: reaction}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  delete "/messages/:message_id/reactions/:emoji" do
+    message_id = conn.path_params["message_id"]
+    emoji = conn.path_params["emoji"]
+    user_id = conn.assigns.current_user.id
+    
+    case EnhancedMessageService.remove_reaction(message_id, user_id, emoji) do
+      :ok ->
+        send_resp(conn, 200, Jason.encode!(%{message: "reaction_removed"}))
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/messages/:message_id/reactions" do
+    message_id = conn.path_params["message_id"]
+    
+    case EnhancedMessageService.get_message_reactions(message_id) do
+      {:ok, reactions} ->
+        send_resp(conn, 200, Jason.encode!(%{reactions: reactions}))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  # Message Threads
+  get "/messages/:message_id/thread" do
+    message_id = conn.path_params["message_id"]
+    
+    case EnhancedMessageService.get_thread(message_id) do
+      {:ok, thread} ->
+        send_resp(conn, 200, Jason.encode!(thread))
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/messages/:message_id/thread/messages" do
+    message_id = conn.path_params["message_id"]
+    limit = String.to_integer(conn.query_params["limit"] || "50")
+    before = conn.query_params["before"]
+    
+    case EnhancedMessageService.get_thread_messages(message_id, limit, before) do
+      {:ok, messages} ->
+        send_resp(conn, 200, Jason.encode!(%{messages: messages}))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/messages/:message_id/thread/reply" do
+    message_id = conn.path_params["message_id"]
+    user_id = conn.assigns.current_user.id
+    
+    with {:ok, params} <- validate_thread_reply_params(conn.body_params),
+         {:ok, message} <- EnhancedMessageService.reply_to_thread(message_id, user_id, params) do
+      send_resp(conn, 201, Jason.encode!(%{message: message}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  # Custom Emojis
+  get "/rooms/:room_id/emojis" do
+    room_id = conn.path_params["room_id"]
+    
+    case CustomEmojiService.get_room_emojis(room_id) do
+      {:ok, emojis} ->
+        send_resp(conn, 200, Jason.encode!(%{emojis: emojis}))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/emojis/global" do
+    case CustomEmojiService.get_global_emojis() do
+      {:ok, emojis} ->
+        send_resp(conn, 200, Jason.encode!(%{emojis: emojis}))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/rooms/:room_id/emojis" do
+    room_id = conn.path_params["room_id"]
+    user_id = conn.assigns.current_user.id
+    
+    with {:ok, params} <- validate_custom_emoji_params(conn.body_params),
+         {:ok, emoji} <- CustomEmojiService.create_emoji(room_id, user_id, params) do
+      send_resp(conn, 201, Jason.encode!(emoji))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  delete "/rooms/:room_id/emojis/:emoji_id" do
+    room_id = conn.path_params["room_id"]
+    emoji_id = conn.path_params["emoji_id"]
+    user_id = conn.assigns.current_user.id
+    
+    case CustomEmojiService.delete_emoji(emoji_id, user_id) do
+      :ok ->
+        send_resp(conn, 200, Jason.encode!(%{message: "emoji_deleted"}))
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/emojis/search" do
+    query = conn.query_params["q"]
+    room_id = conn.query_params["room_id"]
+    
+    if query && String.length(query) >= 2 do
+      case CustomEmojiService.search_emojis(query, room_id) do
+        {:ok, emojis} ->
+          send_resp(conn, 200, Jason.encode!(%{emojis: emojis}))
+        {:error, reason} ->
+          send_resp(conn, 500, Jason.encode!(%{error: reason}))
+      end
+    else
+      send_resp(conn, 400, Jason.encode!(%{error: "query_too_short"}))
+    end
+  end
+
+  # Offline Messages
+  get "/messages/offline" do
+    user_id = conn.assigns.current_user.id
+    
+    case OfflineQueueService.get_offline_messages(user_id) do
+      {:ok, messages} ->
+        send_resp(conn, 200, Jason.encode!(%{messages: messages}))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/messages/offline/received" do
+    user_id = conn.assigns.current_user.id
+    
+    with {:ok, params} <- validate_offline_received_params(conn.body_params),
+         :ok <- OfflineQueueService.mark_messages_received(user_id, params["message_ids"]) do
+      send_resp(conn, 200, Jason.encode!(%{message: "messages_marked_received"}))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  # Analytics
+  get "/analytics/messages" do
+    user_id = conn.assigns.current_user.id
+    room_id = conn.query_params["room_id"]
+    period = conn.query_params["period"] || "7d"
+    
+    case AnalyticsService.get_message_analytics(user_id, room_id, period) do
+      {:ok, analytics} ->
+        send_resp(conn, 200, Jason.encode!(analytics))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/rooms/:room_id/insights" do
+    room_id = conn.path_params["room_id"]
+    user_id = conn.assigns.current_user.id
+    
+    # Check if user can access this room
+    if RoomService.can_send_message?(user_id, room_id) do
+      case AnalyticsService.get_room_insights(room_id) do
+        {:ok, insights} ->
+          send_resp(conn, 200, Jason.encode!(insights))
+        {:error, reason} ->
+          send_resp(conn, 500, Jason.encode!(%{error: reason}))
+      end
+    else
+      send_resp(conn, 403, Jason.encode!(%{error: "unauthorized"}))
+    end
+  end
+
+  # Multi-device Sync
+  get "/sync/device-state" do
+    user_id = conn.assigns.current_user.id
+    
+    case MultiDeviceSyncService.get_device_state(user_id) do
+      {:ok, state} ->
+        send_resp(conn, 200, Jason.encode!(state))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  post "/sync/register-device" do
+    user_id = conn.assigns.current_user.id
+    
+    with {:ok, params} <- validate_device_params(conn.body_params),
+         {:ok, device} <- MultiDeviceSyncService.register_device(user_id, params) do
+      send_resp(conn, 201, Jason.encode!(device))
+    else
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  get "/sync/devices" do
+    user_id = conn.assigns.current_user.id
+    
+    case MultiDeviceSyncService.get_user_devices(user_id) do
+      {:ok, devices} ->
+        send_resp(conn, 200, Jason.encode!(%{devices: devices}))
+      {:error, reason} ->
+        send_resp(conn, 500, Jason.encode!(%{error: reason}))
+    end
+  end
+
+  delete "/sync/devices/:device_id" do
+    device_id = conn.path_params["device_id"]
+    user_id = conn.assigns.current_user.id
+    
+    case MultiDeviceSyncService.remove_device(user_id, device_id) do
+      :ok ->
+        send_resp(conn, 200, Jason.encode!(%{message: "device_removed"}))
+      {:error, reason} ->
+        send_resp(conn, 400, Jason.encode!(%{error: reason}))
+    end
+  end
+
   # Catch-all
   match _ do
     send_resp(conn, 404, Jason.encode!(%{error: "not_found"}))
@@ -664,4 +964,76 @@ defmodule Sup.ApiRouter do
     changeset = User.changeset(user, params)
     Sup.Repo.update(changeset)
   end
+
+  # Advanced messaging validation helpers
+  defp validate_send_message_params(params = %{"room_id" => room_id, "content" => content, "type" => type})
+       when is_binary(room_id) and is_binary(content) and is_binary(type) do
+    base_params = %{"room_id" => room_id, "content" => content, "type" => type}
+    
+    # Add optional reply_to_id if present
+    final_params = case Map.get(params, "reply_to_id") do
+      reply_to_id when is_binary(reply_to_id) -> Map.put(base_params, "reply_to_id", reply_to_id)
+      _ -> base_params
+    end
+    
+    {:ok, final_params}
+  end
+
+  defp validate_send_message_params(_), do: {:error, "invalid_params"}
+
+  defp validate_edit_message_params(%{"content" => content}) when is_binary(content) do
+    {:ok, %{"content" => content}}
+  end
+
+  defp validate_edit_message_params(_), do: {:error, "invalid_params"}
+
+  defp validate_reaction_params(%{"emoji" => emoji}) when is_binary(emoji) do
+    {:ok, %{"emoji" => emoji}}
+  end
+
+  defp validate_reaction_params(_), do: {:error, "invalid_params"}
+
+  defp validate_thread_reply_params(%{"content" => content, "type" => type})
+       when is_binary(content) and is_binary(type) do
+    {:ok, %{"content" => content, "type" => type}}
+  end
+
+  defp validate_thread_reply_params(_), do: {:error, "invalid_params"}
+
+  defp validate_custom_emoji_params(params = %{"name" => name, "image_url" => image_url})
+       when is_binary(name) and is_binary(image_url) do
+    base_params = %{"name" => name, "image_url" => image_url}
+    
+    # Add optional tags if present
+    final_params = case Map.get(params, "tags") do
+      tags when is_list(tags) -> Map.put(base_params, "tags", tags)
+      _ -> base_params
+    end
+    
+    {:ok, final_params}
+  end
+
+  defp validate_custom_emoji_params(_), do: {:error, "invalid_params"}
+
+  defp validate_offline_received_params(%{"message_ids" => message_ids})
+       when is_list(message_ids) do
+    {:ok, %{"message_ids" => message_ids}}
+  end
+
+  defp validate_offline_received_params(_), do: {:error, "invalid_params"}
+
+  defp validate_device_params(params = %{"device_name" => device_name, "device_type" => device_type})
+       when is_binary(device_name) and is_binary(device_type) do
+    base_params = %{"device_name" => device_name, "device_type" => device_type}
+    
+    # Add optional device_info if present
+    final_params = case Map.get(params, "device_info") do
+      device_info when is_map(device_info) -> Map.put(base_params, "device_info", device_info)
+      _ -> base_params
+    end
+    
+    {:ok, final_params}
+  end
+
+  defp validate_device_params(_), do: {:error, "invalid_params"}
 end

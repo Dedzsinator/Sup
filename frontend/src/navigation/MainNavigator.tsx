@@ -8,11 +8,15 @@ import { useTheme } from '../theme';
 import ChatListScreen from '../screens/chat/ChatListScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import CreateRoomScreen from '../screens/chat/CreateRoomScreen';
+import ThreadScreen from '../screens/chat/ThreadScreen';
+import MessageSearchScreen from '../screens/chat/MessageSearchScreen';
+import EmojiManagementScreen from '../screens/chat/EmojiManagementScreen';
+import RoomSettingsScreen from '../screens/chat/RoomSettingsScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 
 // Types
-import { Room } from '../types';
+import { Room, MessageThread } from '../types';
 
 export type MainTabParamList = {
     ChatsTab: undefined;
@@ -24,6 +28,10 @@ export type ChatStackParamList = {
     ChatList: undefined;
     Chat: { room: Room };
     CreateRoom: undefined;
+    ThreadView: { thread: MessageThread };
+    MessageSearch: { room?: Room };
+    EmojiManagement: { room: Room };
+    RoomSettings: { room: Room };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -72,6 +80,38 @@ function ChatNavigator() {
                 component={CreateRoomScreen}
                 options={{
                     title: 'Create Room',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <ChatStack.Screen
+                name="ThreadView"
+                component={ThreadScreen}
+                options={({ route }) => ({
+                    title: `Thread`,
+                    headerBackTitle: 'Back'
+                })}
+            />
+            <ChatStack.Screen
+                name="MessageSearch"
+                component={MessageSearchScreen}
+                options={{
+                    title: 'Search Messages',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <ChatStack.Screen
+                name="EmojiManagement"
+                component={EmojiManagementScreen}
+                options={{
+                    title: 'Custom Emojis',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <ChatStack.Screen
+                name="RoomSettings"
+                component={RoomSettingsScreen}
+                options={{
+                    title: 'Room Settings',
                     headerBackTitle: 'Back'
                 }}
             />

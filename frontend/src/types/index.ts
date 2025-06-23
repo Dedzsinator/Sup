@@ -94,13 +94,90 @@ export interface Message {
   sender_id: string;
   room_id: string;
   content: string;
-  type: 'text' | 'image' | 'file' | 'audio' | 'video';
+  type: 'text' | 'image' | 'file' | 'audio' | 'video' | 'sticker' | 'location' | 'contact';
   timestamp: string;
   inserted_at: string;
   reply_to_id?: string;
+  thread_id?: string;
   edited_at?: string;
   delivery_status?: 'sent' | 'delivered' | 'read';
+  is_encrypted?: boolean;
+  reactions?: MessageReaction[];
+  thread_info?: ThreadInfo;
+  reply_info?: ReplyInfo;
+  metadata?: MessageMetadata;
   sender?: User;
+  enhanced?: boolean;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  users: string[];
+}
+
+export interface ThreadInfo {
+  thread_id: string;
+  thread_title: string;
+}
+
+export interface ReplyInfo {
+  reply_to_id: string;
+  reply_to_content: string;
+  reply_to_sender: string;
+}
+
+export interface MessageMetadata {
+  mentions?: string[];
+  hashtags?: string[];
+  links?: string[];
+  media_metadata?: any;
+  location?: any;
+  quoted_message_id?: string;
+}
+
+export interface MessageThread {
+  id: string;
+  parent_message_id: string;
+  room_id: string;
+  title: string;
+  created_by: string;
+  message_count: number;
+  participants: string[];
+  last_message_id?: string;
+  last_activity_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomEmoji {
+  id: string;
+  name: string;
+  display_name: string;
+  room_id?: string;
+  file_path: string;
+  content_type: string;
+  file_size: number;
+  created_by: string;
+  description?: string;
+  tags: string[];
+  is_active: boolean;
+  usage_count: number;
+  created_at: string;
+}
+
+export interface OfflineMessage {
+  id: string;
+  user_id: string;
+  message_type: string;
+  message_id: string;
+  room_id: string;
+  sender_id: string;
+  content: string;
+  metadata: any;
+  priority: number;
+  expires_at: string;
+  created_at: string;
 }
 
 export interface DeliveryReceipt {
@@ -127,7 +204,15 @@ export interface PresenceUpdate {
 }
 
 export interface WebSocketMessage {
-  type: 'message' | 'typing' | 'presence' | 'delivery_receipt' | 'error' | 'message_sent' | 'call_initiated' | 'call_answered' | 'call_declined' | 'call_ended' | 'webrtc_signaling';
+  type: 'message' | 'typing' | 'presence' | 'delivery_receipt' | 'error' | 'message_sent' | 
+        'call_initiated' | 'call_answered' | 'call_declined' | 'call_ended' | 'webrtc_signaling' |
+        'reaction' | 'reaction_added' | 'reaction_removed' | 'message_edited' | 'message_deleted' |
+        'thread_created' | 'thread_message_sent' | 'thread_event' | 'presence_update' |
+        'activity_update' | 'voice_presence_update' | 'search_results' | 'mentions' |
+        'offline_message' | 'offline_reaction' | 'offline_mention' | 'missed_call' |
+        'custom_emoji_added' | 'custom_emoji_updated' | 'custom_emoji_deleted' |
+        'analytics_event' | 'sync_state_updated' | 'message_states_synced' |
+        'presence_synced' | 'conflict_resolved';
   data: any;
 }
 
