@@ -87,8 +87,9 @@ defmodule Sup.Messaging.OfflineQueueService do
 
   @impl true
   def handle_call({:get_pending_count, user_id}, _from, state) do
-    count = from(m in OfflineMessage, where: m.user_id == ^user_id)
-            |> Repo.aggregate(:count, :id)
+    count =
+      from(m in OfflineMessage, where: m.user_id == ^user_id)
+      |> Repo.aggregate(:count, :id)
 
     {:reply, count, state}
   end
@@ -112,7 +113,8 @@ defmodule Sup.Messaging.OfflineQueueService do
       content: message_data[:content],
       metadata: message_data[:metadata] || %{},
       priority: determine_priority(message_data),
-      expires_at: DateTime.utc_now() |> DateTime.add(7 * 24 * 3600, :second) # 7 days
+      # 7 days
+      expires_at: DateTime.utc_now() |> DateTime.add(7 * 24 * 3600, :second)
     }
 
     case OfflineMessage.changeset(%OfflineMessage{}, offline_message_attrs) |> Repo.insert() do
@@ -127,10 +129,12 @@ defmodule Sup.Messaging.OfflineQueueService do
   end
 
   defp deliver_queued_messages(user_id) do
-    queued_messages = from(m in OfflineMessage,
-                          where: m.user_id == ^user_id,
-                          order_by: [asc: m.priority, asc: m.inserted_at])
-                     |> Repo.all()
+    queued_messages =
+      from(m in OfflineMessage,
+        where: m.user_id == ^user_id,
+        order_by: [asc: m.priority, asc: m.inserted_at]
+      )
+      |> Repo.all()
 
     if length(queued_messages) > 0 do
       Logger.info("Delivering #{length(queued_messages)} queued messages to user #{user_id}")
@@ -145,6 +149,7 @@ defmodule Sup.Messaging.OfflineQueueService do
 
       # Clean up delivered messages
       message_ids = Enum.map(queued_messages, & &1.id)
+
       from(m in OfflineMessage, where: m.id in ^message_ids)
       |> Repo.delete_all()
     end
@@ -171,45 +176,66 @@ defmodule Sup.Messaging.OfflineQueueService do
   defp deliver_message_group(user_id, "reaction", messages) do
     # Deliver reaction notifications
     Enum.each(messages, fn offline_msg ->
-      Phoenix.PubSub.broadcast(Sup.PubSub, "user:#{user_id}", {:offline_reaction, offline_msg.metadata})
+      Phoenix.PubSub.broadcast(
+        Sup.PubSub,
+        "user:#{user_id}",
+        {:offline_reaction, offline_msg.metadata}
+      )
     end)
   end
 
   defp deliver_message_group(user_id, "mention", messages) do
     # Deliver mention notifications
     Enum.each(messages, fn offline_msg ->
-      Phoenix.PubSub.broadcast(Sup.PubSub, "user:#{user_id}", {:offline_mention, offline_msg.metadata})
+      Phoenix.PubSub.broadcast(
+        Sup.PubSub,
+        "user:#{user_id}",
+        {:offline_mention, offline_msg.metadata}
+      )
     end)
   end
 
   defp deliver_message_group(user_id, "call", messages) do
     # Deliver missed call notifications
     Enum.each(messages, fn offline_msg ->
-      Phoenix.PubSub.broadcast(Sup.PubSub, "user:#{user_id}", {:missed_call, offline_msg.metadata})
+      Phoenix.PubSub.broadcast(
+        Sup.PubSub,
+        "user:#{user_id}",
+        {:missed_call, offline_msg.metadata}
+      )
     end)
   end
 
   defp deliver_message_group(user_id, _message_type, messages) do
     # Deliver other message types generically
     Enum.each(messages, fn offline_msg ->
-      Phoenix.PubSub.broadcast(Sup.PubSub, "user:#{user_id}", {:offline_notification, offline_msg})
+      Phoenix.PubSub.broadcast(
+        Sup.PubSub,
+        "user:#{user_id}",
+        {:offline_notification, offline_msg}
+      )
     end)
   end
 
   defp determine_priority(message_data) do
     case message_data do
-      %{type: "call"} -> 1  # Highest priority
-      %{metadata: %{mentions: mentions}} when length(mentions) > 0 -> 2  # High priority for mentions
-      %{type: "direct_message"} -> 3  # Medium-high priority for DMs
-      _ -> 4  # Normal priority
+      # Highest priority
+      %{type: "call"} -> 1
+      # High priority for mentions
+      %{metadata: %{mentions: mentions}} when length(mentions) > 0 -> 2
+      # Medium-high priority for DMs
+      %{type: "direct_message"} -> 3
+      # Normal priority
+      _ -> 4
     end
   end
 
   defp cleanup_old_messages do
     cutoff_time = DateTime.utc_now() |> DateTime.add(-7 * 24 * 3600, :second)
 
-    {deleted_count, _} = from(m in OfflineMessage, where: m.expires_at < ^cutoff_time)
-                        |> Repo.delete_all()
+    {deleted_count, _} =
+      from(m in OfflineMessage, where: m.expires_at < ^cutoff_time)
+      |> Repo.delete_all()
 
     if deleted_count > 0 do
       Logger.info("Cleaned up #{deleted_count} expired offline messages")

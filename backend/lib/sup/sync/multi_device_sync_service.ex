@@ -182,10 +182,11 @@ defmodule Sup.Sync.MultiDeviceSyncService do
           device_type: device_info["type"]
         })
 
-        {:ok, %{
-          device_id: device_id,
-          sync_state: DeviceSyncState.public_fields(sync_state)
-        }}
+        {:ok,
+         %{
+           device_id: device_id,
+           sync_state: DeviceSyncState.public_fields(sync_state)
+         }}
 
       {:error, changeset} ->
         {:error, changeset}
@@ -209,8 +210,9 @@ defmodule Sup.Sync.MultiDeviceSyncService do
 
       sync_state ->
         # Determine sync timestamp
-        sync_from = last_sync_timestamp ||
-                   get_nested_value(sync_state.sync_data, ["messages", "last_sync"])
+        sync_from =
+          last_sync_timestamp ||
+            get_nested_value(sync_state.sync_data, ["messages", "last_sync"])
 
         # Get user's rooms
         user_rooms = Sup.Room.RoomService.get_user_rooms(user_id)
@@ -224,6 +226,7 @@ defmodule Sup.Sync.MultiDeviceSyncService do
 
         # Update sync state
         new_sync_timestamp = DateTime.utc_now()
+
         update_device_sync_data(sync_state, "messages", %{
           "last_sync" => new_sync_timestamp,
           "last_message_id" => get_latest_message_id(messages)
@@ -233,7 +236,8 @@ defmodule Sup.Sync.MultiDeviceSyncService do
           messages: messages,
           message_states: message_states,
           sync_timestamp: new_sync_timestamp,
-          has_more: length(messages) >= 100  # Pagination hint
+          # Pagination hint
+          has_more: length(messages) >= 100
         }
 
         {:ok, sync_result}
@@ -241,11 +245,13 @@ defmodule Sup.Sync.MultiDeviceSyncService do
   end
 
   defp get_user_devices_impl(user_id) do
-    devices = from(ds in DeviceSyncState,
-                  where: ds.user_id == ^user_id and ds.is_active == true,
-                  order_by: [desc: ds.last_sync_timestamp])
-             |> Repo.all()
-             |> Enum.map(&DeviceSyncState.public_fields/1)
+    devices =
+      from(ds in DeviceSyncState,
+        where: ds.user_id == ^user_id and ds.is_active == true,
+        order_by: [desc: ds.last_sync_timestamp]
+      )
+      |> Repo.all()
+      |> Enum.map(&DeviceSyncState.public_fields/1)
 
     {:ok, devices}
   end
@@ -272,9 +278,10 @@ defmodule Sup.Sync.MultiDeviceSyncService do
   end
 
   defp resolve_conflicts_impl(user_id, conflicts) do
-    resolved_conflicts = Enum.map(conflicts, fn conflict ->
-      resolve_single_conflict(user_id, conflict)
-    end)
+    resolved_conflicts =
+      Enum.map(conflicts, fn conflict ->
+        resolve_single_conflict(user_id, conflict)
+      end)
 
     # Broadcast resolution to all devices
     broadcast_conflict_resolution(user_id, resolved_conflicts)
@@ -290,10 +297,11 @@ defmodule Sup.Sync.MultiDeviceSyncService do
       sync_state ->
         merged_sync_data = deep_merge(sync_state.sync_data || %{}, sync_data)
 
-        changeset = DeviceSyncState.changeset(sync_state, %{
-          sync_data: merged_sync_data,
-          last_sync_timestamp: DateTime.utc_now()
-        })
+        changeset =
+          DeviceSyncState.changeset(sync_state, %{
+            sync_data: merged_sync_data,
+            last_sync_timestamp: DateTime.utc_now()
+          })
 
         case Repo.update(changeset) do
           {:ok, _updated_state} ->
@@ -387,10 +395,11 @@ defmodule Sup.Sync.MultiDeviceSyncService do
     current_data = sync_state.sync_data || %{}
     updated_data = put_in(current_data, [category], data)
 
-    changeset = DeviceSyncState.changeset(sync_state, %{
-      sync_data: updated_data,
-      last_sync_timestamp: DateTime.utc_now()
-    })
+    changeset =
+      DeviceSyncState.changeset(sync_state, %{
+        sync_data: updated_data,
+        last_sync_timestamp: DateTime.utc_now()
+      })
 
     Repo.update(changeset)
   end
@@ -422,9 +431,10 @@ defmodule Sup.Sync.MultiDeviceSyncService do
 
   defp resolve_message_edit_conflict(conflict) do
     # Use the edit with the latest timestamp
-    latest_edit = Enum.max_by(conflict["versions"], fn version ->
-      version["timestamp"]
-    end)
+    latest_edit =
+      Enum.max_by(conflict["versions"], fn version ->
+        version["timestamp"]
+      end)
 
     %{
       conflict_id: conflict["id"],
@@ -436,9 +446,10 @@ defmodule Sup.Sync.MultiDeviceSyncService do
 
   defp resolve_read_receipt_conflict(conflict) do
     # Read receipts: use the earliest read timestamp
-    earliest_read = Enum.min_by(conflict["versions"], fn version ->
-      version["read_at"]
-    end)
+    earliest_read =
+      Enum.min_by(conflict["versions"], fn version ->
+        version["read_at"]
+      end)
 
     %{
       conflict_id: conflict["id"],
@@ -450,9 +461,10 @@ defmodule Sup.Sync.MultiDeviceSyncService do
 
   defp resolve_presence_conflict(conflict) do
     # Presence: use latest status change
-    latest_presence = Enum.max_by(conflict["versions"], fn version ->
-      version["changed_at"]
-    end)
+    latest_presence =
+      Enum.max_by(conflict["versions"], fn version ->
+        version["changed_at"]
+      end)
 
     %{
       conflict_id: conflict["id"],
@@ -463,9 +475,10 @@ defmodule Sup.Sync.MultiDeviceSyncService do
   end
 
   defp resolve_by_timestamp(conflict) do
-    latest_version = Enum.max_by(conflict["versions"], fn version ->
-      version["timestamp"]
-    end)
+    latest_version =
+      Enum.max_by(conflict["versions"], fn version ->
+        version["timestamp"]
+      end)
 
     %{
       conflict_id: conflict["id"],
@@ -488,7 +501,11 @@ defmodule Sup.Sync.MultiDeviceSyncService do
           EnhancedMessageService.add_reaction(user_id, reaction["message_id"], reaction["emoji"])
 
         "remove" ->
-          EnhancedMessageService.remove_reaction(user_id, reaction["message_id"], reaction["emoji"])
+          EnhancedMessageService.remove_reaction(
+            user_id,
+            reaction["message_id"],
+            reaction["emoji"]
+          )
       end
     end)
   end
@@ -559,9 +576,11 @@ defmodule Sup.Sync.MultiDeviceSyncService do
     # Remove sync states for devices that haven't synced in 30 days
     cutoff_date = DateTime.utc_now() |> DateTime.add(-30 * 24 * 3600, :second)
 
-    {deleted_count, _} = from(ds in DeviceSyncState,
-                             where: ds.last_sync_timestamp < ^cutoff_date)
-                        |> Repo.delete_all()
+    {deleted_count, _} =
+      from(ds in DeviceSyncState,
+        where: ds.last_sync_timestamp < ^cutoff_date
+      )
+      |> Repo.delete_all()
 
     if deleted_count > 0 do
       Logger.info("Cleaned up #{deleted_count} old device sync states")
@@ -595,5 +614,6 @@ defmodule Sup.Sync.MultiDeviceSyncService do
       end
     end)
   end
+
   defp deep_merge(_map1, map2), do: map2
 end

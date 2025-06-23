@@ -26,8 +26,16 @@ defmodule Sup.Messaging.MessageThread do
   def changeset(thread, attrs) do
     thread
     |> cast(attrs, [
-      :id, :room_id, :parent_message_id, :created_by, :message_count,
-      :participants, :last_message_id, :last_activity_at, :is_pinned, :metadata
+      :id,
+      :room_id,
+      :parent_message_id,
+      :created_by,
+      :message_count,
+      :participants,
+      :last_message_id,
+      :last_activity_at,
+      :is_pinned,
+      :metadata
     ])
     |> validate_required([:room_id, :created_by])
     |> validate_number(:message_count, greater_than: 0)

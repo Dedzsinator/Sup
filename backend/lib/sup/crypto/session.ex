@@ -27,12 +27,23 @@ defmodule Sup.Crypto.Session do
   def changeset(session, attrs) do
     session
     |> cast(attrs, [
-      :sender_id, :recipient_id, :root_key, :chain_key_send, :chain_key_recv,
-      :message_number_send, :message_number_recv, :ephemeral_public,
-      :ephemeral_private, :previous_counter
+      :sender_id,
+      :recipient_id,
+      :root_key,
+      :chain_key_send,
+      :chain_key_recv,
+      :message_number_send,
+      :message_number_recv,
+      :ephemeral_public,
+      :ephemeral_private,
+      :previous_counter
     ])
     |> validate_required([
-      :sender_id, :recipient_id, :root_key, :chain_key_send, :chain_key_recv
+      :sender_id,
+      :recipient_id,
+      :root_key,
+      :chain_key_send,
+      :chain_key_recv
     ])
     |> unique_constraint([:sender_id, :recipient_id])
   end

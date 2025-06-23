@@ -18,3 +18,8 @@ config :logger, level: :debug
 
 # Guardian secret key for development (change in production)
 config :sup, Sup.Auth.Guardian, secret_key: "dev-secret-key-change-in-production"
+
+# Spam Detection Service Configuration
+config :sup,
+  spam_detection_url: "http://localhost:8082",
+  spam_detection_api_key: "development-spam-api-key"

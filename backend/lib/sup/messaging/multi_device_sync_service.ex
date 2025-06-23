@@ -144,19 +144,20 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
       sync_settings: device_info["sync_settings"] || default_sync_settings()
     }
 
-    case DeviceSync.changeset(%DeviceSync{}, device_params) |> Repo.insert(
-      on_conflict: {:replace_all_except, [:id, :user_id, :inserted_at]},
-      conflict_target: [:id]
-    ) do
+    case DeviceSync.changeset(%DeviceSync{}, device_params)
+         |> Repo.insert(
+           on_conflict: {:replace_all_except, [:id, :user_id, :inserted_at]},
+           conflict_target: [:id]
+         ) do
       {:ok, device} ->
         Logger.info("Device registered: #{device.id} for user #{user_id}")
-        
+
         # Broadcast device registration to other devices
         broadcast_to_user_devices(user_id, device.id, %{
           type: "device_registered",
           device: DeviceSync.public_fields(device)
         })
-        
+
         {:ok, DeviceSync.public_fields(device)}
 
       {:error, changeset} ->
@@ -170,16 +171,18 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
         {:error, "device_not_found"}
 
       device ->
-        case Repo.update(DeviceSync.changeset(device, %{is_active: false, last_seen: DateTime.utc_now()})) do
+        case Repo.update(
+               DeviceSync.changeset(device, %{is_active: false, last_seen: DateTime.utc_now()})
+             ) do
           {:ok, updated_device} ->
             Logger.info("Device unregistered: #{device_id} for user #{user_id}")
-            
+
             # Broadcast device unregistration to other devices
             broadcast_to_user_devices(user_id, device_id, %{
               type: "device_unregistered",
               device_id: device_id
             })
-            
+
             {:ok, DeviceSync.public_fields(updated_device)}
 
           {:error, changeset} ->
@@ -189,10 +192,12 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
   end
 
   defp get_user_devices_impl(user_id) do
-    devices = from(ds in DeviceSync,
-      where: ds.user_id == ^user_id and ds.is_active == true,
-      order_by: [desc: ds.last_seen]
-    ) |> Repo.all()
+    devices =
+      from(ds in DeviceSync,
+        where: ds.user_id == ^user_id and ds.is_active == true,
+        order_by: [desc: ds.last_seen]
+      )
+      |> Repo.all()
 
     {:ok, Enum.map(devices, &DeviceSync.public_fields/1)}
   end
@@ -213,7 +218,7 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
     case SyncState.changeset(%SyncState{}, sync_state_params) |> Repo.insert() do
       {:ok, sync_state} ->
         Logger.debug("Device state synced: #{device_id} for user #{user_id}")
-        
+
         # Broadcast state change to other devices
         broadcast_to_user_devices(user_id, device_id, %{
           type: "state_synced",
@@ -237,7 +242,9 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
       timestamp: DateTime.utc_now()
     })
 
-    Logger.debug("Sync requested by device #{device_id} for user #{user_id}: #{inspect(sync_types)}")
+    Logger.debug(
+      "Sync requested by device #{device_id} for user #{user_id}: #{inspect(sync_types)}"
+    )
   end
 
   defp sync_message_read_impl(user_id, message_id, room_id) do
@@ -283,7 +290,8 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
   defp get_device(user_id, device_id) do
     from(ds in DeviceSync,
       where: ds.user_id == ^user_id and ds.id == ^device_id and ds.is_active == true
-    ) |> Repo.one()
+    )
+    |> Repo.one()
   end
 
   defp update_device_last_seen(user_id, device_id) do
@@ -295,17 +303,20 @@ defmodule Sup.Messaging.MultiDeviceSyncService do
 
   defp broadcast_to_user_devices(user_id, excluding_device_id, message) do
     # Get all active devices for the user
-    devices = from(ds in DeviceSync,
-      where: ds.user_id == ^user_id and ds.is_active == true,
-      select: ds.id
-    ) |> Repo.all()
+    devices =
+      from(ds in DeviceSync,
+        where: ds.user_id == ^user_id and ds.is_active == true,
+        select: ds.id
+      )
+      |> Repo.all()
 
     # Filter out the excluding device if specified
-    target_devices = if excluding_device_id do
-      Enum.reject(devices, &(&1 == excluding_device_id))
-    else
-      devices
-    end
+    target_devices =
+      if excluding_device_id do
+        Enum.reject(devices, &(&1 == excluding_device_id))
+      else
+        devices
+      end
 
     # Broadcast to each device via WebSocket
     Enum.each(target_devices, fn device_id ->

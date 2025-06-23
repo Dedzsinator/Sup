@@ -57,8 +57,10 @@ defmodule Sup.Repo.Migrations.CreateEnhancedMessagingTables do
       add(:media_metadata, :map, default: %{})
       add(:location, :map)
       add(:quoted_message_id, :binary_id)
-      add(:search_vector, :string) # For full-text search
-      add(:content_hash, :string) # For deduplication
+      # For full-text search
+      add(:search_vector, :string)
+      # For deduplication
+      add(:content_hash, :string)
 
       timestamps()
     end
@@ -92,13 +94,15 @@ defmodule Sup.Repo.Migrations.CreateEnhancedMessagingTables do
       add(:id, :binary_id, primary_key: true)
       add(:user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false)
       add(:bot_name, :string, null: false)
-      add(:bot_type, :string, null: false) # webhook, ai, scripted
+      # webhook, ai, scripted
+      add(:bot_type, :string, null: false)
       add(:webhook_url, :string)
       add(:api_key_hash, :string)
       add(:configuration, :map, default: %{})
       add(:capabilities, {:array, :string}, default: [])
       add(:is_active, :boolean, default: true)
-      add(:rate_limit, :integer, default: 100) # requests per minute
+      # requests per minute
+      add(:rate_limit, :integer, default: 100)
 
       timestamps()
     end
@@ -135,7 +139,8 @@ defmodule Sup.Repo.Migrations.CreateEnhancedMessagingTables do
       add(:name, :string, null: false)
       add(:image_url, :string, null: false)
       add(:created_by, references(:users, type: :binary_id, on_delete: :delete_all), null: false)
-      add(:room_id, :binary_id) # null for global emojis
+      # null for global emojis
+      add(:room_id, :binary_id)
       add(:is_animated, :boolean, default: false)
       add(:tags, {:array, :string}, default: [])
       add(:usage_count, :integer, default: 0)
@@ -154,7 +159,8 @@ defmodule Sup.Repo.Migrations.CreateEnhancedMessagingTables do
       add(:id, :binary_id, primary_key: true)
       add(:user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false)
       add(:device_id, :string, null: false)
-      add(:device_type, :string, null: false) # web, mobile, desktop
+      # web, mobile, desktop
+      add(:device_type, :string, null: false)
       add(:last_sync_timestamp, :utc_datetime)
       add(:sync_state, :map, default: %{})
       add(:unread_counts, :map, default: %{})
@@ -175,8 +181,10 @@ defmodule Sup.Repo.Migrations.CreateEnhancedMessagingTables do
       add(:file_size, :integer, null: false)
       add(:file_url, :string, null: false)
       add(:thumbnail_url, :string)
-      add(:duration, :integer) # for audio/video
-      add(:dimensions, :map) # for images/videos
+      # for audio/video
+      add(:duration, :integer)
+      # for images/videos
+      add(:dimensions, :map)
       add(:metadata, :map, default: %{})
       add(:is_encrypted, :boolean, default: false)
       add(:encryption_key, :binary)

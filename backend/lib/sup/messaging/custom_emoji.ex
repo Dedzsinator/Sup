@@ -42,7 +42,9 @@ defmodule Sup.Messaging.CustomEmoji do
     ])
     |> validate_required([:name, :file_path, :content_type, :created_by])
     |> validate_length(:name, min: 2, max: 50)
-    |> validate_format(:name, ~r/^[a-zA-Z0-9_]+$/, message: "can only contain letters, numbers, and underscores")
+    |> validate_format(:name, ~r/^[a-zA-Z0-9_]+$/,
+      message: "can only contain letters, numbers, and underscores"
+    )
     |> validate_number(:file_size, greater_than: 0)
     |> validate_inclusion(:content_type, ["image/png", "image/gif", "image/jpeg", "image/webp"])
     |> unique_constraint([:name, :room_id])

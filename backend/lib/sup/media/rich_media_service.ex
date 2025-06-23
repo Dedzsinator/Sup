@@ -12,8 +12,12 @@ defmodule Sup.Media.RichMediaService do
   @supported_image_types ["image/jpeg", "image/png", "image/gif", "image/webp"]
   @supported_video_types ["video/mp4", "video/webm", "video/mov", "video/avi"]
   @supported_audio_types ["audio/mp3", "audio/wav", "audio/ogg", "audio/m4a"]
-  @supported_document_types ["application/pdf", "text/plain", "application/msword",
-                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+  @supported_document_types [
+    "application/pdf",
+    "text/plain",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ]
 
   @max_file_size_mb 50
   @max_file_size_bytes @max_file_size_mb * 1024 * 1024
@@ -25,7 +29,6 @@ defmodule Sup.Media.RichMediaService do
     with :ok <- validate_file(file_data),
          {:ok, processed_file} <- process_file(file_data),
          {:ok, attachment} <- create_attachment_record(user_id, processed_file, opts) do
-
       # Generate thumbnails for images/videos
       Task.start(fn -> generate_thumbnails(attachment) end)
 
@@ -96,11 +99,12 @@ defmodule Sup.Media.RichMediaService do
 
     query = apply_attachment_filters(query, filters)
 
-    attachments = query
-                 |> order_by([a], desc: a.inserted_at)
-                 |> limit(50)
-                 |> Repo.all()
-                 |> Enum.map(&MessageAttachment.public_fields/1)
+    attachments =
+      query
+      |> order_by([a], desc: a.inserted_at)
+      |> limit(50)
+      |> Repo.all()
+      |> Enum.map(&MessageAttachment.public_fields/1)
 
     {:ok, attachments}
   end
@@ -165,11 +169,14 @@ defmodule Sup.Media.RichMediaService do
   defp validate_file_size(data) when byte_size(data) > @max_file_size_bytes do
     {:error, "file_too_large"}
   end
+
   defp validate_file_size(_), do: :ok
 
   defp validate_file_type(content_type) do
-    allowed_types = @supported_image_types ++ @supported_video_types ++
-                   @supported_audio_types ++ @supported_document_types
+    allowed_types =
+      @supported_image_types ++
+        @supported_video_types ++
+        @supported_audio_types ++ @supported_document_types
 
     if content_type in allowed_types do
       :ok
@@ -258,21 +265,22 @@ defmodule Sup.Media.RichMediaService do
         {800, 600, "medium"}
       ]
 
-      thumbnails = Enum.map(sizes, fn {width, height, size_name} ->
-        generate_image_thumbnail(attachment, width, height, size_name)
-      end)
+      thumbnails =
+        Enum.map(sizes, fn {width, height, size_name} ->
+          generate_image_thumbnail(attachment, width, height, size_name)
+        end)
 
       # Update attachment with thumbnail paths
-      thumbnail_data = Enum.reduce(thumbnails, %{}, fn {size, path}, acc ->
-        Map.put(acc, size, path)
-      end)
+      thumbnail_data =
+        Enum.reduce(thumbnails, %{}, fn {size, path}, acc ->
+          Map.put(acc, size, path)
+        end)
 
       updated_metadata = Map.put(attachment.metadata || %{}, "thumbnails", thumbnail_data)
 
       attachment
       |> MessageAttachment.changeset(%{metadata: updated_metadata})
       |> Repo.update()
-
     rescue
       error ->
         Logger.error("Failed to generate thumbnails for #{attachment.id}: #{inspect(error)}")
@@ -281,17 +289,23 @@ defmodule Sup.Media.RichMediaService do
 
   defp generate_image_thumbnail(attachment, width, height, size_name) do
     input_path = attachment.file_path
-    output_filename = "#{Path.rootname(attachment.stored_filename)}_#{size_name}#{Path.extname(attachment.stored_filename)}"
+
+    output_filename =
+      "#{Path.rootname(attachment.stored_filename)}_#{size_name}#{Path.extname(attachment.stored_filename)}"
+
     output_path = get_thumbnail_path(output_filename)
 
     # This would use ImageMagick or similar tool
     case System.cmd("convert", [
-      input_path,
-      "-resize", "#{width}x#{height}^",
-      "-gravity", "center",
-      "-extent", "#{width}x#{height}",
-      output_path
-    ]) do
+           input_path,
+           "-resize",
+           "#{width}x#{height}^",
+           "-gravity",
+           "center",
+           "-extent",
+           "#{width}x#{height}",
+           output_path
+         ]) do
       {_, 0} ->
         {size_name, output_path}
 
@@ -309,11 +323,14 @@ defmodule Sup.Media.RichMediaService do
 
       # Extract thumbnail using ffmpeg
       case System.cmd("ffmpeg", [
-        "-i", input_path,
-        "-vf", "thumbnail,scale=300:200",
-        "-frames:v", "1",
-        output_path
-      ]) do
+             "-i",
+             input_path,
+             "-vf",
+             "thumbnail,scale=300:200",
+             "-frames:v",
+             "1",
+             output_path
+           ]) do
         {_, 0} ->
           updated_metadata = Map.put(attachment.metadata || %{}, "video_thumbnail", output_path)
 
@@ -324,7 +341,6 @@ defmodule Sup.Media.RichMediaService do
         {error, _} ->
           Logger.error("Video thumbnail generation failed: #{error}")
       end
-
     rescue
       error ->
         Logger.error("Failed to generate video thumbnail for #{attachment.id}: #{inspect(error)}")
@@ -333,9 +349,9 @@ defmodule Sup.Media.RichMediaService do
 
   defp can_access_attachment?(user_id, attachment) do
     # Users can access their own attachments
-    attachment.uploaded_by == user_id ||
     # Users can access attachments in rooms they're members of
-    (attachment.message_id && can_access_message?(user_id, attachment.message_id))
+    attachment.uploaded_by == user_id ||
+      (attachment.message_id && can_access_message?(user_id, attachment.message_id))
   end
 
   defp can_delete_attachment?(user_id, attachment) do
@@ -389,7 +405,8 @@ defmodule Sup.Media.RichMediaService do
       {"date_to", date}, q ->
         where(q, [a], a.inserted_at <= ^date)
 
-      _, q -> q
+      _, q ->
+        q
     end)
   end
 

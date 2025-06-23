@@ -109,7 +109,6 @@ defmodule Sup.Messaging.BotService do
   def add_bot_to_room(bot_id, room_id, admin_user_id) do
     with bot when not is_nil(bot) <- get_active_bot(bot_id),
          true <- RoomService.is_room_admin?(admin_user_id, room_id) do
-
       case RoomService.join_room(bot.id, room_id) do
         {:ok, _member} ->
           Logger.info("Bot #{bot.username} added to room #{room_id}")
@@ -130,7 +129,6 @@ defmodule Sup.Messaging.BotService do
   def remove_bot_from_room(bot_id, room_id, admin_user_id) do
     with bot when not is_nil(bot) <- get_active_bot(bot_id),
          true <- RoomService.is_room_admin?(admin_user_id, room_id) do
-
       case RoomService.leave_room(bot.id, room_id) do
         {:ok, _member} ->
           Logger.info("Bot #{bot.username} removed from room #{room_id}")
@@ -202,8 +200,10 @@ defmodule Sup.Messaging.BotService do
 
   defp get_room_bots(room_id) do
     from(b in BotUser,
-         join: rm in "room_members", on: rm.user_id == b.id,
-         where: rm.room_id == ^room_id and b.is_active == true)
+      join: rm in "room_members",
+      on: rm.user_id == b.id,
+      where: rm.room_id == ^room_id and b.is_active == true
+    )
     |> Repo.all()
   end
 
@@ -216,16 +216,12 @@ defmodule Sup.Messaging.BotService do
     cond do
       # Don't process bot's own messages
       message.sender_id == bot.id -> false
-
       # Process if it's a command
       String.starts_with?(message.content, "/") -> true
-
       # Process if bot is mentioned
       String.contains?(message.content, "@#{bot.username}") -> true
-
       # Process if bot is configured to respond to all messages
       bot.permissions["respond_to_all"] -> true
-
       true -> false
     end
   end
@@ -261,8 +257,12 @@ defmodule Sup.Messaging.BotService do
       room_info: get_room_context(message.room_id)
     }
 
-    case HTTPoison.post(bot.webhook_url, Jason.encode!(webhook_payload),
-                       [{"Content-Type", "application/json"}], timeout: 5000) do
+    case HTTPoison.post(
+           bot.webhook_url,
+           Jason.encode!(webhook_payload),
+           [{"Content-Type", "application/json"}],
+           timeout: 5000
+         ) do
       {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
         handle_webhook_response(bot, message, body)
 
@@ -281,7 +281,8 @@ defmodule Sup.Messaging.BotService do
 
       {:ok, %{"response" => response_data}} when is_map(response_data) ->
         send_bot_message(bot.id, message.room_id, response_data["content"],
-                        type: response_data["type"] || "text")
+          type: response_data["type"] || "text"
+        )
 
       _ ->
         Logger.warning("Invalid webhook response format from bot #{bot.username}")
@@ -317,18 +318,19 @@ defmodule Sup.Messaging.BotService do
   defp find_matching_command(_bot, nil), do: nil
 
   defp execute_bot_command(bot, message, command) do
-    response = case command["type"] do
-      "static" ->
-        command["response"]
+    response =
+      case command["type"] do
+        "static" ->
+          command["response"]
 
-      "dynamic" ->
-        # Execute custom logic based on command configuration
-        execute_dynamic_command(command, message)
+        "dynamic" ->
+          # Execute custom logic based on command configuration
+          execute_dynamic_command(command, message)
 
-      "webhook" ->
-        # Send to specific webhook for this command
-        send_command_to_webhook(bot, message, command)
-    end
+        "webhook" ->
+          # Send to specific webhook for this command
+          send_command_to_webhook(bot, message, command)
+      end
 
     if response do
       send_bot_message(bot.id, message.room_id, response)

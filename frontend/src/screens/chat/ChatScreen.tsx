@@ -10,11 +10,11 @@ import { useTheme, colors, Spacing } from '../../theme';
 import { ChatStackParamList } from '../../navigation/MainNavigator';
 import { Message } from '../../types';
 import ModernCard from '../../components/ModernCard';
-import { 
-  EnhancedMessage, 
-  EmojiPicker, 
-  OfflineQueueIndicator,
-  RichMediaUpload
+import {
+    EnhancedMessage,
+    EmojiPicker,
+    OfflineQueueIndicator,
+    RichMediaUpload
 } from '../../components';
 
 type ChatScreenRouteProp = RouteProp<ChatStackParamList, 'Chat'>;
@@ -29,11 +29,11 @@ const { width } = Dimensions.get('window');
 
 export default function ChatScreen({ route, navigation }: Props) {
     const { room } = route.params;
-    const { 
-        messages, 
-        sendMessage, 
-        startTyping, 
-        stopTyping, 
+    const {
+        messages,
+        sendMessage,
+        startTyping,
+        stopTyping,
         setCurrentRoom,
         replyingToMessage,
         setReplyingToMessage,
@@ -59,7 +59,7 @@ export default function ChatScreen({ route, navigation }: Props) {
 
     useEffect(() => {
         setCurrentRoomCallback(room);
-        
+
         // Set up navigation header with room settings button
         navigation.setOptions({
             headerRight: () => (
@@ -71,7 +71,7 @@ export default function ChatScreen({ route, navigation }: Props) {
                 </TouchableOpacity>
             ),
         });
-        
+
         return () => setCurrentRoomCallback(null);
     }, [room, setCurrentRoomCallback, navigation, theme.colors.primary]);
 
@@ -159,14 +159,14 @@ export default function ChatScreen({ route, navigation }: Props) {
                         <Text style={[styles.replyLabel, { color: theme.colors.onSurfaceVariant }]}>
                             Replying to {replyingToMessage.sender?.username || 'Unknown'}
                         </Text>
-                        <Text 
+                        <Text
                             style={[styles.replyText, { color: theme.colors.onSurface }]}
                             numberOfLines={1}
                         >
                             {replyingToMessage.content}
                         </Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={() => setReplyingToMessage(null)}
                         style={styles.replyClose}
                     >
@@ -182,14 +182,14 @@ export default function ChatScreen({ route, navigation }: Props) {
                         <Text style={[styles.replyLabel, { color: colors.primary[600] }]}>
                             Editing message
                         </Text>
-                        <Text 
+                        <Text
                             style={[styles.replyText, { color: theme.colors.onSurface }]}
                             numberOfLines={1}
                         >
                             {editingMessage.content}
                         </Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={() => setEditingMessage(null)}
                         style={styles.replyClose}
                     >
@@ -263,7 +263,7 @@ export default function ChatScreen({ route, navigation }: Props) {
     );
 
     const renderOfflineIndicator = () => (
-        <OfflineQueueIndicator 
+        <OfflineQueueIndicator
             onPress={() => {
                 // Handle offline queue tap
                 console.log('Offline queue tapped');

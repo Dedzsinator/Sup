@@ -28,6 +28,11 @@ interface ExtendedChatState extends ChatState {
   searchResults: Message[];
   searchQuery: string;
   
+  // Spam detection state
+  spamDetectionEnabled: boolean;
+  spamStats: any;
+  isSpamServiceHealthy: boolean;
+  
   // UI state
   selectedThread: MessageThread | null;
   editingMessage: Message | null;
@@ -69,6 +74,12 @@ interface ChatStore extends ExtendedChatState {
   loadGlobalEmojis: () => Promise<void>;
   createCustomEmoji: (roomId: string, name: string, imageUrl: string, tags?: string[]) => Promise<boolean>;
   deleteCustomEmoji: (roomId: string, emojiId: string) => Promise<boolean>;
+  
+  // Spam detection management
+  checkMessageSpam: (message: string) => Promise<any>;
+  reportSpam: (message: string, isSpam: boolean) => Promise<boolean>;
+  getSpamStats: () => Promise<void>;
+  checkSpamServiceHealth: () => Promise<void>;
   
   // Offline message management
   loadOfflineMessages: () => Promise<void>;
@@ -118,6 +129,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   selectedThread: null,
   editingMessage: null,
   replyingToMessage: null,
+  spamDetectionEnabled: false,
+  spamStats: null,
+  isSpamServiceHealthy: true,
 
   initialize: () => {
     // Set up WebSocket event listeners
@@ -867,6 +881,70 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to update room settings:', error);
       return false;
+    }
+  },
+
+  // Spam detection methods
+  checkMessageSpam: async (message: string): Promise<any> => {
+    try {
+      const response = await apiClient.post('/api/spam/check', {
+        message
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.spam_check;
+      } else {
+        console.error('Failed to check spam');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error checking spam:', error);
+      return null;
+    }
+  },
+
+  reportSpam: async (message: string, isSpam: boolean): Promise<boolean> => {
+    try {
+      const response = await apiClient.post('/api/spam/report', {
+        message,
+        is_spam: isSpam
+      });
+
+      if (response.ok) {
+        return true;
+      } else {
+        console.error('Failed to report spam');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error reporting spam:', error);
+      return false;
+    }
+  },
+
+  getSpamStats: async (): Promise<void> => {
+    try {
+      const response = await apiClient.get('/api/spam/stats');
+      
+      if (response.ok) {
+        const data = await response.json();
+        set({ spamStats: data.stats });
+      } else {
+        console.error('Failed to get spam stats');
+      }
+    } catch (error) {
+      console.error('Error getting spam stats:', error);
+    }
+  },
+
+  checkSpamServiceHealth: async (): Promise<void> => {
+    try {
+      const response = await apiClient.get('/api/spam/health');
+      set({ isSpamServiceHealthy: response.ok });
+    } catch (error) {
+      console.error('Spam service health check failed:', error);
+      set({ isSpamServiceHealthy: false });
     }
   },
 }));

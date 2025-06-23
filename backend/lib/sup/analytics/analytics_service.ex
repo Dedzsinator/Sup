@@ -12,10 +12,21 @@ defmodule Sup.Analytics.AnalyticsService do
   import Ecto.Query
 
   @analytics_events [
-    :message_sent, :message_read, :message_edited, :message_deleted,
-    :reaction_added, :reaction_removed, :thread_created, :thread_replied,
-    :user_joined, :user_left, :call_initiated, :call_ended,
-    :bot_command_executed, :search_performed, :mention_triggered
+    :message_sent,
+    :message_read,
+    :message_edited,
+    :message_deleted,
+    :reaction_added,
+    :reaction_removed,
+    :thread_created,
+    :thread_replied,
+    :user_joined,
+    :user_left,
+    :call_initiated,
+    :call_ended,
+    :bot_command_executed,
+    :search_performed,
+    :mention_triggered
   ]
 
   def start_link(opts) do
@@ -142,19 +153,20 @@ defmodule Sup.Analytics.AnalyticsService do
 
   defp flush_buffer(events) do
     # Convert events to database records
-    analytics_records = Enum.map(events, fn event ->
-      %{
-        event_type: to_string(event.event_type),
-        user_id: event.user_id,
-        room_id: event.metadata[:room_id],
-        message_id: event.metadata[:message_id],
-        metadata: event.metadata,
-        event_date: DateTime.to_date(event.timestamp),
-        hour_bucket: extract_hour_bucket(event.timestamp),
-        inserted_at: event.timestamp,
-        updated_at: event.timestamp
-      }
-    end)
+    analytics_records =
+      Enum.map(events, fn event ->
+        %{
+          event_type: to_string(event.event_type),
+          user_id: event.user_id,
+          room_id: event.metadata[:room_id],
+          message_id: event.metadata[:message_id],
+          metadata: event.metadata,
+          event_date: DateTime.to_date(event.timestamp),
+          hour_bucket: extract_hour_bucket(event.timestamp),
+          inserted_at: event.timestamp,
+          updated_at: event.timestamp
+        }
+      end)
 
     # Batch insert
     case Repo.insert_all(MessageAnalytics, analytics_records) do
@@ -170,14 +182,17 @@ defmodule Sup.Analytics.AnalyticsService do
     date_from = Keyword.get(opts, :date_from, Date.utc_today() |> Date.add(-7))
     date_to = Keyword.get(opts, :date_to, Date.utc_today())
 
-    base_query = from(a in MessageAnalytics,
-                     where: a.event_date >= ^date_from and a.event_date <= ^date_to)
+    base_query =
+      from(a in MessageAnalytics,
+        where: a.event_date >= ^date_from and a.event_date <= ^date_to
+      )
 
-    query = if room_id do
-      where(base_query, [a], a.room_id == ^room_id)
-    else
-      base_query
-    end
+    query =
+      if room_id do
+        where(base_query, [a], a.room_id == ^room_id)
+      else
+        base_query
+      end
 
     # Aggregate metrics
     metrics = %{
@@ -199,10 +214,13 @@ defmodule Sup.Analytics.AnalyticsService do
     date_from = Keyword.get(opts, :date_from, Date.utc_today() |> Date.add(-30))
     date_to = Keyword.get(opts, :date_to, Date.utc_today())
 
-    query = from(a in MessageAnalytics,
-                where: a.user_id == ^user_id and
-                       a.event_date >= ^date_from and
-                       a.event_date <= ^date_to)
+    query =
+      from(a in MessageAnalytics,
+        where:
+          a.user_id == ^user_id and
+            a.event_date >= ^date_from and
+            a.event_date <= ^date_to
+      )
 
     metrics = %{
       total_activity: Repo.aggregate(query, :count, :id),
@@ -223,10 +241,13 @@ defmodule Sup.Analytics.AnalyticsService do
     date_from = Keyword.get(opts, :date_from, Date.utc_today() |> Date.add(-30))
     date_to = Keyword.get(opts, :date_to, Date.utc_today())
 
-    query = from(a in MessageAnalytics,
-                where: a.room_id == ^room_id and
-                       a.event_date >= ^date_from and
-                       a.event_date <= ^date_to)
+    query =
+      from(a in MessageAnalytics,
+        where:
+          a.room_id == ^room_id and
+            a.event_date >= ^date_from and
+            a.event_date <= ^date_to
+      )
 
     metrics = %{
       total_activity: Repo.aggregate(query, :count, :id),
@@ -246,8 +267,10 @@ defmodule Sup.Analytics.AnalyticsService do
     date_from = Keyword.get(opts, :date_from, Date.utc_today() |> Date.add(-7))
     date_to = Keyword.get(opts, :date_to, Date.utc_today())
 
-    query = from(a in MessageAnalytics,
-                where: a.event_date >= ^date_from and a.event_date <= ^date_to)
+    query =
+      from(a in MessageAnalytics,
+        where: a.event_date >= ^date_from and a.event_date <= ^date_to
+      )
 
     metrics = %{
       total_events: Repo.aggregate(query, :count, :id),
@@ -286,52 +309,58 @@ defmodule Sup.Analytics.AnalyticsService do
 
   defp get_daily_breakdown(query) do
     from(q in query,
-         group_by: q.event_date,
-         select: {q.event_date, count(q.id)},
-         order_by: q.event_date)
+      group_by: q.event_date,
+      select: {q.event_date, count(q.id)},
+      order_by: q.event_date
+    )
     |> Repo.all()
     |> Enum.into(%{})
   end
 
   defp get_hourly_breakdown(query) do
     from(q in query,
-         group_by: q.hour_bucket,
-         select: {q.hour_bucket, count(q.id)},
-         order_by: q.hour_bucket)
+      group_by: q.hour_bucket,
+      select: {q.hour_bucket, count(q.id)},
+      order_by: q.hour_bucket
+    )
     |> Repo.all()
     |> Enum.into(%{})
   end
 
   defp get_top_users(query) do
     from(q in query,
-         where: not is_nil(q.user_id),
-         group_by: q.user_id,
-         select: {q.user_id, count(q.id)},
-         order_by: [desc: count(q.id)],
-         limit: 10)
+      where: not is_nil(q.user_id),
+      group_by: q.user_id,
+      select: {q.user_id, count(q.id)},
+      order_by: [desc: count(q.id)],
+      limit: 10
+    )
     |> Repo.all()
   end
 
   defp get_event_type_breakdown(query) do
     from(q in query,
-         group_by: q.event_type,
-         select: {q.event_type, count(q.id)})
+      group_by: q.event_type,
+      select: {q.event_type, count(q.id)}
+    )
     |> Repo.all()
     |> Enum.into(%{})
   end
 
   defp get_user_active_days(query) do
     from(q in query,
-         select: count(q.event_date, :distinct))
+      select: count(q.event_date, :distinct)
+    )
     |> Repo.one()
   end
 
   defp get_user_peak_hour(query) do
     from(q in query,
-         group_by: q.hour_bucket,
-         select: {q.hour_bucket, count(q.id)},
-         order_by: [desc: count(q.id)],
-         limit: 1)
+      group_by: q.hour_bucket,
+      select: {q.hour_bucket, count(q.id)},
+      order_by: [desc: count(q.id)],
+      limit: 1
+    )
     |> Repo.one()
     |> case do
       {hour, _count} -> hour
@@ -341,26 +370,29 @@ defmodule Sup.Analytics.AnalyticsService do
 
   defp get_room_active_users(query) do
     from(q in query,
-         where: not is_nil(q.user_id),
-         select: count(q.user_id, :distinct))
+      where: not is_nil(q.user_id),
+      select: count(q.user_id, :distinct)
+    )
     |> Repo.one()
   end
 
   defp get_room_peak_periods(query) do
     from(q in query,
-         group_by: [q.event_date, q.hour_bucket],
-         select: {q.event_date, q.hour_bucket, count(q.id)},
-         order_by: [desc: count(q.id)],
-         limit: 5)
+      group_by: [q.event_date, q.hour_bucket],
+      select: {q.event_date, q.hour_bucket, count(q.id)},
+      order_by: [desc: count(q.id)],
+      limit: 5
+    )
     |> Repo.all()
   end
 
   defp get_daily_active_users(query) do
     from(q in query,
-         where: not is_nil(q.user_id),
-         group_by: q.event_date,
-         select: {q.event_date, count(q.user_id, :distinct)},
-         order_by: q.event_date)
+      where: not is_nil(q.user_id),
+      group_by: q.event_date,
+      select: {q.event_date, count(q.user_id, :distinct)},
+      order_by: q.event_date
+    )
     |> Repo.all()
     |> Enum.into(%{})
   end

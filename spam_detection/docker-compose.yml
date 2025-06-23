@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  spam-detection:
+    build: .
+    ports:
+      - "8003:8003"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./config:/app/config
+    depends_on:
+      - redis
+    networks:
+      - spam-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - spam-net
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
+
+networks:
+  spam-net:
+    driver: bridge

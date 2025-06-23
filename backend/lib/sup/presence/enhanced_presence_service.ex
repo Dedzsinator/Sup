@@ -83,7 +83,7 @@ defmodule Sup.Presence.EnhancedPresenceService do
   @impl true
   def handle_cast({:set_presence, user_id, status, custom_message}, state) do
     timestamp = DateTime.utc_now()
-    
+
     presence_data = %{
       user_id: user_id,
       status: status,
@@ -97,11 +97,16 @@ defmodule Sup.Presence.EnhancedPresenceService do
 
     # Update Redis for persistence
     Redis.command([
-      "HSET", "presence:#{user_id}",
-      "status", Atom.to_string(status),
-      "custom_message", custom_message || "",
-      "last_seen", DateTime.to_iso8601(timestamp),
-      "device_count", get_device_count(user_id)
+      "HSET",
+      "presence:#{user_id}",
+      "status",
+      Atom.to_string(status),
+      "custom_message",
+      custom_message || "",
+      "last_seen",
+      DateTime.to_iso8601(timestamp),
+      "device_count",
+      get_device_count(user_id)
     ])
 
     # Broadcast presence change to user's rooms
@@ -112,7 +117,7 @@ defmodule Sup.Presence.EnhancedPresenceService do
 
   def handle_cast({:set_activity, user_id, room_id, activity_type, metadata}, state) do
     timestamp = DateTime.utc_now()
-    
+
     activity_data = %{
       user_id: user_id,
       room_id: room_id,
@@ -127,8 +132,10 @@ defmodule Sup.Presence.EnhancedPresenceService do
 
     # Set TTL in Redis
     Redis.command([
-      "SETEX", "activity:#{user_id}:#{room_id}:#{activity_type}",
-      30, # 30 seconds TTL
+      "SETEX",
+      "activity:#{user_id}:#{room_id}:#{activity_type}",
+      # 30 seconds TTL
+      30,
       Jason.encode!(activity_data)
     ])
 
@@ -175,7 +182,7 @@ defmodule Sup.Presence.EnhancedPresenceService do
       [{^user_id, voice_data}] ->
         :ets.delete(@voice_presence_table, user_id)
         broadcast_voice_presence_change(user_id, voice_data.room_id, "left", voice_data)
-      
+
       [] ->
         :ok
     end
@@ -185,57 +192,63 @@ defmodule Sup.Presence.EnhancedPresenceService do
 
   @impl true
   def handle_call({:get_presence, user_id}, _from, state) do
-    presence = case :ets.lookup(@table_name, user_id) do
-      [{^user_id, data}] -> data
-      [] -> %{status: :offline, last_seen: nil}
-    end
+    presence =
+      case :ets.lookup(@table_name, user_id) do
+        [{^user_id, data}] -> data
+        [] -> %{status: :offline, last_seen: nil}
+      end
 
     {:reply, presence, state}
   end
 
   def handle_call({:get_room_presence, room_id}, _from, state) do
     room_members = RoomService.get_room_members(room_id)
-    
-    presence_data = Enum.map(room_members, fn member ->
-      case :ets.lookup(@table_name, member.id) do
-        [{_, data}] -> Map.put(data, :user_id, member.id)
-        [] -> %{user_id: member.id, status: :offline, last_seen: nil}
-      end
-    end)
+
+    presence_data =
+      Enum.map(room_members, fn member ->
+        case :ets.lookup(@table_name, member.id) do
+          [{_, data}] -> Map.put(data, :user_id, member.id)
+          [] -> %{user_id: member.id, status: :offline, last_seen: nil}
+        end
+      end)
 
     {:reply, presence_data, state}
   end
 
   def handle_call({:get_activity, user_id, room_id}, _from, state) do
-    activities = :ets.select(@activity_table, [
-      {{{user_id, room_id, :"$1"}, :"$2"}, [], [:"$2"]}
-    ])
+    activities =
+      :ets.select(@activity_table, [
+        {{{user_id, room_id, :"$1"}, :"$2"}, [], [:"$2"]}
+      ])
 
     {:reply, activities, state}
   end
 
   def handle_call({:get_room_activities, room_id}, _from, state) do
-    activities = :ets.select(@activity_table, [
-      {{{:"$1", room_id, :"$2"}, :"$3"}, [], [:"$3"]}
-    ])
+    activities =
+      :ets.select(@activity_table, [
+        {{{:"$1", room_id, :"$2"}, :"$3"}, [], [:"$3"]}
+      ])
 
     # Group by activity type
-    grouped_activities = Enum.group_by(activities, fn activity ->
-      activity.activity_type
-    end)
+    grouped_activities =
+      Enum.group_by(activities, fn activity ->
+        activity.activity_type
+      end)
 
     {:reply, grouped_activities, state}
   end
 
   def handle_call({:get_online_count, room_id}, _from, state) do
     room_members = RoomService.get_room_members(room_id)
-    
-    online_count = Enum.count(room_members, fn member ->
-      case :ets.lookup(@table_name, member.id) do
-        [{_, %{status: status}}] -> status in [:online, :away, :busy]
-        [] -> false
-      end
-    end)
+
+    online_count =
+      Enum.count(room_members, fn member ->
+        case :ets.lookup(@table_name, member.id) do
+          [{_, %{status: status}}] -> status in [:online, :away, :busy]
+          [] -> false
+        end
+      end)
 
     {:reply, online_count, state}
   end
@@ -244,10 +257,11 @@ defmodule Sup.Presence.EnhancedPresenceService do
   def handle_info(:cleanup, state) do
     # Clean up stale activities (older than 30 seconds)
     cutoff_timestamp = DateTime.add(DateTime.utc_now(), -30, :second)
-    
-    stale_activities = :ets.select(@activity_table, [
-      {{:"$1", :"$2"}, [{:<, {:map_get, :started_at, :"$2"}, cutoff_timestamp}], [:"$1"]}
-    ])
+
+    stale_activities =
+      :ets.select(@activity_table, [
+        {{:"$1", :"$2"}, [{:<, {:map_get, :started_at, :"$2"}, cutoff_timestamp}], [:"$1"]}
+      ])
 
     Enum.each(stale_activities, fn key ->
       :ets.delete(@activity_table, key)
@@ -262,12 +276,15 @@ defmodule Sup.Presence.EnhancedPresenceService do
   def handle_info(:sync_redis, state) do
     # Sync presence data to Redis for persistence
     all_presence = :ets.tab2list(@table_name)
-    
+
     Enum.each(all_presence, fn {user_id, presence_data} ->
       Redis.command([
-        "HSET", "presence:#{user_id}",
-        "status", Atom.to_string(presence_data.status),
-        "last_seen", DateTime.to_iso8601(presence_data.last_seen)
+        "HSET",
+        "presence:#{user_id}",
+        "status",
+        Atom.to_string(presence_data.status),
+        "last_seen",
+        DateTime.to_iso8601(presence_data.last_seen)
       ])
     end)
 
@@ -327,7 +344,7 @@ defmodule Sup.Presence.EnhancedPresenceService do
     case Registry.lookup(Sup.ConnectionRegistry, user_id) do
       connections when length(connections) > 0 ->
         %{device_count: length(connections)}
-      
+
       [] ->
         %{device_count: 0}
     end

@@ -1,0 +1,173 @@
+2025-06-23 13:21:28,451 - __main__ - INFO - Starting spam detection model training
+2025-06-23 13:21:28,451 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=1000, user_vector_dim=64, test_size=0.2, hyperopt=False, generate_synthetic=True, synthetic_samples=200, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config')
+2025-06-23 13:21:28,451 - trainer - INFO - Initialized trainer with data_dir=./data
+2025-06-23 13:21:28,451 - __main__ - INFO - Generating 200 synthetic training samples
+2025-06-23 13:21:28,454 - trainer - INFO - Generated 200 synthetic messages (60 spam, 140 ham)
+2025-06-23 13:21:28,454 - __main__ - INFO - Loaded 200 training samples
+2025-06-23 13:21:28,455 - __main__ - INFO - Starting model training
+2025-06-23 13:21:28,455 - trainer - INFO - Starting training with 200 messages
+2025-06-23 13:21:28,459 - classifier - INFO - Initialized HyperoptimizedBayesClassifier with vocab_size=1000
+2025-06-23 13:21:28,459 - classifier - INFO - Training on 160 messages
+2025-06-23 13:21:28,460 - classifier - INFO - Built vocabulary with 238 words
+2025-06-23 13:21:28,487 - classifier - INFO - Training completed. Spam prior: 0.300
+2025-06-23 13:21:28,516 - __main__ - ERROR - Training failed: Input contains NaN.
+2025-06-23 13:36:22,282 - __main__ - INFO - Starting spam detection model training
+2025-06-23 13:36:22,282 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='/app/data', models_dir='/app/models', config_dir='/app/config')
+2025-06-23 13:36:22,282 - __main__ - ERROR - Training failed: [Errno 13] Permission denied: '/app'
+2025-06-23 13:37:37,569 - __main__ - INFO - Starting spam detection model training
+2025-06-23 13:37:37,570 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='/app/data', models_dir='/app/models', config_dir='/app/config')
+2025-06-23 13:37:37,570 - __main__ - ERROR - Training failed: [Errno 13] Permission denied: '/app'
+2025-06-23 13:39:41,130 - __main__ - INFO - Starting spam detection model training
+2025-06-23 13:39:41,130 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config', quick=True)
+2025-06-23 13:39:41,130 - __main__ - INFO - Quick test mode - testing basic spam detection
+2025-06-23 13:39:41,130 - __main__ - INFO - Testing spam detection patterns...
+2025-06-23 13:39:41,130 - __main__ - INFO - Message: 'Hello, how are you?...' -> Spam: False (Expected: False)
+2025-06-23 13:39:41,130 - __main__ - INFO - Message: 'BUY VIAGRA NOW!!! CHEAP PRICES!!!...' -> Spam: True (Expected: True)
+2025-06-23 13:39:41,130 - __main__ - INFO - Message: 'Win $1000000 now! Click this link!...' -> Spam: True (Expected: True)
+2025-06-23 13:39:41,130 - __main__ - INFO - Message: 'Thanks for the meeting today...' -> Spam: False (Expected: False)
+2025-06-23 13:39:41,130 - __main__ - INFO - Message: 'URGENT: Nigerian prince needs help...' -> Spam: True (Expected: True)
+2025-06-23 13:39:41,130 - __main__ - INFO - Quick test accuracy: 1.00
+2025-06-23 14:07:16,221 - __main__ - INFO - Starting spam detection model training
+2025-06-23 14:07:16,221 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config', enhanced=True, quick=True)
+2025-06-23 14:07:16,221 - __main__ - INFO - Using enhanced training pipeline with advanced ML techniques
+2025-06-23 14:07:16,221 - enhanced_preprocessor - INFO - Loaded 122 stopwords
+2025-06-23 14:07:16,221 - enhanced_preprocessor - INFO - Initialized EnhancedDataPreprocessor with data_dir=data
+2025-06-23 14:07:16,221 - enhanced_preprocessor - INFO - NLTK enabled: False
+2025-06-23 14:07:16,221 - enhanced_preprocessor - INFO - Advanced features enabled: True
+2025-06-23 14:07:16,222 - __main__ - ERROR - Training failed: LabelPropagation.__init__() got an unexpected keyword argument 'alpha'
+2025-06-23 14:08:10,581 - __main__ - INFO - Starting spam detection model training
+2025-06-23 14:08:10,581 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config', enhanced=True, quick=True)
+2025-06-23 14:08:10,581 - __main__ - INFO - Using enhanced training pipeline with advanced ML techniques
+2025-06-23 14:08:29,781 - enhanced_preprocessor - INFO - Loaded 233 stopwords
+2025-06-23 14:08:29,781 - enhanced_preprocessor - INFO - Initialized EnhancedDataPreprocessor with data_dir=data
+2025-06-23 14:08:29,781 - enhanced_preprocessor - INFO - NLTK enabled: True
+2025-06-23 14:08:29,781 - enhanced_preprocessor - INFO - Advanced features enabled: True
+2025-06-23 14:08:29,781 - advanced_classifier - INFO - Initialized AdvancedSpamClassifier with model_type=ensemble
+2025-06-23 14:08:29,781 - enhanced_trainer - INFO - Initialized EnhancedSpamTrainer
+2025-06-23 14:08:29,782 - enhanced_trainer - INFO - Loading and preprocessing data...
+2025-06-23 14:08:30,556 - enhanced_preprocessor - INFO - Loaded 6000 email messages (4500 spam, 1500 ham)
+2025-06-23 14:08:30,556 - enhanced_trainer - INFO - Loaded 6000 email messages
+2025-06-23 14:08:30,559 - enhanced_preprocessor - INFO - Loaded 5574 SMS messages (747 spam, 4827 ham)
+2025-06-23 14:08:30,559 - enhanced_trainer - INFO - Loaded 5574 SMS messages
+2025-06-23 14:08:30,561 - enhanced_preprocessor - INFO - Loaded 6000 messages from text files
+2025-06-23 14:08:30,561 - enhanced_trainer - INFO - Loaded 6000 text file messages
+2025-06-23 14:08:30,561 - enhanced_trainer - INFO - Creating feature matrix...
+2025-06-23 14:08:30,562 - __main__ - ERROR - Training failed: 
+**********************************************************************
+  Resource [93mpunkt_tab[0m not found.
+  Please use the NLTK Downloader to obtain the resource:
+
+  [31m>>> import nltk
+  >>> nltk.download('punkt_tab')
+  [0m
+  For more information see: https://www.nltk.org/data.html
+
+  Attempted to load [93mtokenizers/punkt_tab/english/[0m
+
+  Searched in:
+    - '/home/deginandor/nltk_data'
+    - '/home/deginandor/Documents/Programming/Sup/spam_detection/venv/nltk_data'
+    - '/home/deginandor/Documents/Programming/Sup/spam_detection/venv/share/nltk_data'
+    - '/home/deginandor/Documents/Programming/Sup/spam_detection/venv/lib/nltk_data'
+    - '/usr/share/nltk_data'
+    - '/usr/local/share/nltk_data'
+    - '/usr/lib/nltk_data'
+    - '/usr/local/lib/nltk_data'
+**********************************************************************
+
+2025-06-23 14:08:38,836 - __main__ - INFO - Starting spam detection model training
+2025-06-23 14:08:38,836 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config', enhanced=True, quick=True)
+2025-06-23 14:08:38,836 - __main__ - INFO - Using enhanced training pipeline with advanced ML techniques
+2025-06-23 14:08:39,241 - enhanced_preprocessor - INFO - Loaded 233 stopwords
+2025-06-23 14:08:39,241 - enhanced_preprocessor - INFO - Initialized EnhancedDataPreprocessor with data_dir=data
+2025-06-23 14:08:39,241 - enhanced_preprocessor - INFO - NLTK enabled: True
+2025-06-23 14:08:39,241 - enhanced_preprocessor - INFO - Advanced features enabled: True
+2025-06-23 14:08:39,241 - advanced_classifier - INFO - Initialized AdvancedSpamClassifier with model_type=ensemble
+2025-06-23 14:08:39,241 - enhanced_trainer - INFO - Initialized EnhancedSpamTrainer
+2025-06-23 14:08:39,241 - enhanced_trainer - INFO - Loading and preprocessing data...
+2025-06-23 14:08:39,694 - enhanced_preprocessor - INFO - Loaded 6000 email messages (4500 spam, 1500 ham)
+2025-06-23 14:08:39,694 - enhanced_trainer - INFO - Loaded 6000 email messages
+2025-06-23 14:08:39,697 - enhanced_preprocessor - INFO - Loaded 5574 SMS messages (747 spam, 4827 ham)
+2025-06-23 14:08:39,697 - enhanced_trainer - INFO - Loaded 5574 SMS messages
+2025-06-23 14:08:39,699 - enhanced_preprocessor - INFO - Loaded 6000 messages from text files
+2025-06-23 14:08:39,699 - enhanced_trainer - INFO - Loaded 6000 text file messages
+2025-06-23 14:08:39,699 - enhanced_trainer - INFO - Creating feature matrix...
+2025-06-23 14:08:39,700 - __main__ - ERROR - Training failed: 
+**********************************************************************
+  Resource [93mpunkt_tab[0m not found.
+  Please use the NLTK Downloader to obtain the resource:
+
+  [31m>>> import nltk
+  >>> nltk.download('punkt_tab')
+  [0m
+  For more information see: https://www.nltk.org/data.html
+
+  Attempted to load [93mtokenizers/punkt_tab/english/[0m
+
+  Searched in:
+    - '/home/deginandor/nltk_data'
+    - '/home/deginandor/Documents/Programming/Sup/spam_detection/venv/nltk_data'
+    - '/home/deginandor/Documents/Programming/Sup/spam_detection/venv/share/nltk_data'
+    - '/home/deginandor/Documents/Programming/Sup/spam_detection/venv/lib/nltk_data'
+    - '/usr/share/nltk_data'
+    - '/usr/local/share/nltk_data'
+    - '/usr/lib/nltk_data'
+    - '/usr/local/lib/nltk_data'
+**********************************************************************
+
+2025-06-23 14:09:52,420 - __main__ - INFO - Starting spam detection model training
+2025-06-23 14:09:52,420 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config', enhanced=True, quick=True)
+2025-06-23 14:09:52,420 - __main__ - INFO - Using enhanced training pipeline with advanced ML techniques
+2025-06-23 14:09:53,635 - enhanced_preprocessor - INFO - Loaded 233 stopwords
+2025-06-23 14:09:53,635 - enhanced_preprocessor - INFO - Initialized EnhancedDataPreprocessor with data_dir=data
+2025-06-23 14:09:53,635 - enhanced_preprocessor - INFO - NLTK enabled: True
+2025-06-23 14:09:53,635 - enhanced_preprocessor - INFO - Advanced features enabled: True
+2025-06-23 14:09:53,635 - advanced_classifier - INFO - Initialized AdvancedSpamClassifier with model_type=ensemble
+2025-06-23 14:09:53,635 - enhanced_trainer - INFO - Initialized EnhancedSpamTrainer
+2025-06-23 14:09:53,635 - enhanced_trainer - INFO - Loading and preprocessing data...
+2025-06-23 14:09:54,133 - enhanced_preprocessor - INFO - Loaded 6000 email messages (4500 spam, 1500 ham)
+2025-06-23 14:09:54,133 - enhanced_trainer - INFO - Loaded 6000 email messages
+2025-06-23 14:09:54,136 - enhanced_preprocessor - INFO - Loaded 5574 SMS messages (747 spam, 4827 ham)
+2025-06-23 14:09:54,136 - enhanced_trainer - INFO - Loaded 5574 SMS messages
+2025-06-23 14:09:54,138 - enhanced_preprocessor - INFO - Loaded 6000 messages from text files
+2025-06-23 14:09:54,138 - enhanced_trainer - INFO - Loaded 6000 text file messages
+2025-06-23 14:09:54,138 - enhanced_trainer - INFO - Creating feature matrix...
+2025-06-23 14:10:04,083 - enhanced_preprocessor - INFO - Saved 17574 processed messages to data/processed/enhanced_processed_data.jsonl
+2025-06-23 14:10:04,083 - enhanced_trainer - INFO - Data preprocessing complete:
+2025-06-23 14:10:04,083 - enhanced_trainer - INFO -   Total messages: 17574
+2025-06-23 14:10:04,083 - enhanced_trainer - INFO -   Labeled: 11574 (Spam: 5247, Ham: 6327)
+2025-06-23 14:10:04,083 - enhanced_trainer - INFO -   Unlabeled: 6000
+2025-06-23 14:10:04,083 - enhanced_trainer - INFO -   Features: 5015
+2025-06-23 14:10:04,083 - __main__ - INFO - Data loaded: 17574 messages, 5015 features
+2025-06-23 14:10:04,083 - enhanced_trainer - INFO - Starting model training...
+2025-06-23 14:13:18,482 - __main__ - INFO - Starting spam detection model training
+2025-06-23 14:13:18,482 - __main__ - INFO - Arguments: Namespace(dataset='spam_dataset', vocab_size=50000, user_vector_dim=512, test_size=0.2, hyperopt=False, generate_synthetic=False, synthetic_samples=10000, log_level='INFO', data_dir='./data', models_dir='./models', config_dir='./config', enhanced=True, quick=True)
+2025-06-23 14:13:18,483 - __main__ - INFO - Using enhanced training pipeline with advanced ML techniques
+2025-06-23 14:13:18,741 - enhanced_preprocessor - INFO - Loaded 233 stopwords
+2025-06-23 14:13:18,741 - enhanced_preprocessor - INFO - Initialized EnhancedDataPreprocessor with data_dir=data
+2025-06-23 14:13:18,741 - enhanced_preprocessor - INFO - NLTK enabled: True
+2025-06-23 14:13:18,741 - enhanced_preprocessor - INFO - Advanced features enabled: True
+2025-06-23 14:13:18,741 - advanced_classifier - INFO - Initialized AdvancedSpamClassifier with model_type=ensemble
+2025-06-23 14:13:18,741 - enhanced_trainer - INFO - Initialized EnhancedSpamTrainer
+2025-06-23 14:13:18,741 - enhanced_trainer - INFO - Loading and preprocessing data...
+2025-06-23 14:13:18,752 - enhanced_preprocessor - INFO - Loading 4500 spam email files...
+2025-06-23 14:13:19,646 - enhanced_preprocessor - INFO - Loading 1500 ham email files...
+2025-06-23 14:13:19,907 - enhanced_preprocessor - INFO - Loaded 6000 email messages (4500 spam, 1500 ham)
+2025-06-23 14:13:19,912 - enhanced_trainer - INFO - Loaded 6000 email messages
+2025-06-23 14:13:19,913 - enhanced_preprocessor - INFO - Loading 5574 SMS messages...
+2025-06-23 14:13:19,916 - enhanced_preprocessor - INFO - Loaded 5574 SMS messages (747 spam, 4827 ham)
+2025-06-23 14:13:19,916 - enhanced_trainer - INFO - Loaded 5574 SMS messages
+2025-06-23 14:13:19,918 - enhanced_preprocessor - INFO - Loaded 6000 messages from text files
+2025-06-23 14:13:19,918 - enhanced_trainer - INFO - Loaded 6000 text file messages
+2025-06-23 14:13:19,918 - enhanced_trainer - INFO - Creating feature matrix...
+2025-06-23 14:13:19,918 - enhanced_preprocessor - INFO - Preprocessing messages...
+2025-06-23 14:13:26,489 - enhanced_preprocessor - INFO - Creating TF-IDF features...
+2025-06-23 14:13:27,925 - enhanced_preprocessor - INFO - Extracting linguistic and spam features...
+2025-06-23 14:13:29,655 - enhanced_preprocessor - INFO - Saved 17574 processed messages to data/processed/enhanced_processed_data.jsonl
+2025-06-23 14:13:29,655 - enhanced_trainer - INFO - Data preprocessing complete:
+2025-06-23 14:13:29,655 - enhanced_trainer - INFO -   Total messages: 17574
+2025-06-23 14:13:29,655 - enhanced_trainer - INFO -   Labeled: 11574 (Spam: 5247, Ham: 6327)
+2025-06-23 14:13:29,655 - enhanced_trainer - INFO -   Unlabeled: 6000
+2025-06-23 14:13:29,655 - enhanced_trainer - INFO -   Features: 5015
+2025-06-23 14:13:29,656 - __main__ - INFO - Data loaded: 17574 messages, 5015 features
+2025-06-23 14:13:29,656 - enhanced_trainer - INFO - Starting model training...

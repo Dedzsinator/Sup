@@ -67,6 +67,38 @@ services:
       - /app/node_modules
     command: npm start
 
+  # Autocomplete service
+  autocomplete:
+    build:
+      context: ./autocomplete
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./autocomplete:/app
+    command: python api_server_microservice.py
+
+  # Spam Detection service
+  spam_detection:
+    build:
+      context: ./spam_detection
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      - PYTHONPATH=/app
+      - HOST=0.0.0.0
+      - PORT=8080
+      - API_KEY=development-spam-api-key
+      - DATA_DIR=/app/data
+      - MODELS_DIR=/app/models
+      - CONFIG_DIR=/app/config
+    volumes:
+      - ./spam_detection:/app
+    command: ./start.sh
+
 volumes:
   postgres_data:
   redis_data:

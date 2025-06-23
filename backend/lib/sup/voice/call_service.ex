@@ -9,6 +9,7 @@ defmodule Sup.Voice.CallService do
 
   # Call initiation functions
   def initiate_call(caller_id, opts \\ [])
+
   def initiate_call(caller_id, opts) when is_list(opts) do
     room_id = Keyword.get(opts, :room_id)
     call_type = Keyword.get(opts, :type, :voice)
@@ -37,7 +38,7 @@ defmodule Sup.Voice.CallService do
     end
   end
 
-  # Additional overload for initiate_call/2 and initiate_call/3 
+  # Additional overload for initiate_call/2 and initiate_call/3
   def initiate_call(caller_id, room_id) when is_binary(room_id) do
     initiate_call(caller_id, room_id: room_id)
   end

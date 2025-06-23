@@ -10,6 +10,7 @@ defmodule Sup.WebSocket.Handler do
   alias Sup.Messaging.{MessageService, EnhancedMessageService}
   alias Sup.Presence.PresenceService
   alias Sup.Room.RoomService
+  alias Sup.SpamDetection.Service, as: SpamDetectionService
 
   defstruct [:user_id, :connection_id, :subscriptions]
 
@@ -118,9 +119,14 @@ defmodule Sup.WebSocket.Handler do
 
   # Message handlers
   defp handle_message(%{"type" => "send_message", "data" => data}, state) do
-    case EnhancedMessageService.send_message(state.user_id, data) do
-      {:ok, message} ->
-        # Optimistic response to sender
+    # Extract message content for spam detection
+    message_content = Map.get(data, "content", "")
+    room_id = Map.get(data, "room_id")
+
+    # Check for spam before processing message
+    case SpamDetectionService.process_message(message_content, state.user_id, room_id) do
+      {:ok, :allowed, message} ->
+        # Message allowed, send normally
         response =
           Jason.encode!(%{
             type: "message_sent",
@@ -129,7 +135,30 @@ defmodule Sup.WebSocket.Handler do
 
         {:reply, {:text, response}, state}
 
+      {:ok, :flagged, message} ->
+        # Message flagged but allowed
+        response =
+          Jason.encode!(%{
+            type: "message_sent",
+            data: Map.put(message, :flagged_as_spam, true),
+            warning: "Message flagged for review"
+          })
+
+        {:reply, {:text, response}, state}
+
+      {:error, :spam_detected, details} ->
+        # Message blocked as spam
+        error_response =
+          Jason.encode!(%{
+            type: "message_blocked",
+            error: "Message blocked by spam filter",
+            details: details
+          })
+
+        {:reply, {:text, error_response}, state}
+
       {:error, reason} ->
+        # Other error during processing
         error_response =
           Jason.encode!(%{
             type: "error",
@@ -140,7 +169,13 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "edit_message", "data" => %{"message_id" => message_id, "content" => content}}, state) do
+  defp handle_message(
+         %{
+           "type" => "edit_message",
+           "data" => %{"message_id" => message_id, "content" => content}
+         },
+         state
+       ) do
     case EnhancedMessageService.edit_message(message_id, state.user_id, content) do
       {:ok, message} ->
         response =
@@ -162,7 +197,10 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "delete_message", "data" => %{"message_id" => message_id}}, state) do
+  defp handle_message(
+         %{"type" => "delete_message", "data" => %{"message_id" => message_id}},
+         state
+       ) do
     case EnhancedMessageService.delete_message(message_id, state.user_id) do
       :ok ->
         response =
@@ -185,7 +223,10 @@ defmodule Sup.WebSocket.Handler do
   end
 
   # Reaction handlers
-  defp handle_message(%{"type" => "add_reaction", "data" => %{"message_id" => message_id, "emoji" => emoji}}, state) do
+  defp handle_message(
+         %{"type" => "add_reaction", "data" => %{"message_id" => message_id, "emoji" => emoji}},
+         state
+       ) do
     case EnhancedMessageService.add_reaction(message_id, state.user_id, emoji) do
       {:ok, reaction} ->
         response =
@@ -207,7 +248,13 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "remove_reaction", "data" => %{"message_id" => message_id, "emoji" => emoji}}, state) do
+  defp handle_message(
+         %{
+           "type" => "remove_reaction",
+           "data" => %{"message_id" => message_id, "emoji" => emoji}
+         },
+         state
+       ) do
     case EnhancedMessageService.remove_reaction(message_id, state.user_id, emoji) do
       :ok ->
         response =
@@ -230,7 +277,13 @@ defmodule Sup.WebSocket.Handler do
   end
 
   # Thread handlers
-  defp handle_message(%{"type" => "create_thread", "data" => %{"message_id" => message_id, "initial_reply" => initial_reply}}, state) do
+  defp handle_message(
+         %{
+           "type" => "create_thread",
+           "data" => %{"message_id" => message_id, "initial_reply" => initial_reply}
+         },
+         state
+       ) do
     case EnhancedMessageService.create_thread(message_id, state.user_id, initial_reply) do
       {:ok, thread} ->
         response =
@@ -252,8 +305,15 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "thread_reply", "data" => %{"thread_id" => thread_id, "content" => content, "type" => type}}, state) do
+  defp handle_message(
+         %{
+           "type" => "thread_reply",
+           "data" => %{"thread_id" => thread_id, "content" => content, "type" => type}
+         },
+         state
+       ) do
     params = %{"content" => content, "type" => type}
+
     case EnhancedMessageService.reply_to_thread(thread_id, state.user_id, params) do
       {:ok, message} ->
         response =
@@ -276,10 +336,16 @@ defmodule Sup.WebSocket.Handler do
   end
 
   # Custom emoji handlers
-  defp handle_message(%{"type" => "create_custom_emoji", "data" => %{"room_id" => room_id, "name" => name, "image_url" => image_url} = data}, state) do
+  defp handle_message(
+         %{
+           "type" => "create_custom_emoji",
+           "data" => %{"room_id" => room_id, "name" => name, "image_url" => image_url} = data
+         },
+         state
+       ) do
     tags = Map.get(data, "tags", [])
     params = %{"name" => name, "image_url" => image_url, "tags" => tags}
-    
+
     case Sup.Messaging.CustomEmojiService.create_emoji(room_id, state.user_id, params) do
       {:ok, emoji} ->
         response =
@@ -301,7 +367,13 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "delete_custom_emoji", "data" => %{"room_id" => room_id, "emoji_id" => emoji_id}}, state) do
+  defp handle_message(
+         %{
+           "type" => "delete_custom_emoji",
+           "data" => %{"room_id" => room_id, "emoji_id" => emoji_id}
+         },
+         state
+       ) do
     case Sup.Messaging.CustomEmojiService.delete_emoji(emoji_id, state.user_id) do
       :ok ->
         response =
@@ -327,7 +399,7 @@ defmodule Sup.WebSocket.Handler do
   defp handle_message(%{"type" => "search_messages", "data" => %{"query" => query} = data}, state) do
     room_id = Map.get(data, "room_id")
     limit = Map.get(data, "limit", 20)
-    
+
     case MessageService.search_messages(state.user_id, query, limit) do
       {:ok, messages} ->
         response =
@@ -350,7 +422,13 @@ defmodule Sup.WebSocket.Handler do
   end
 
   # Voice/Video call handlers
-  defp handle_message(%{"type" => "initiate_call", "data" => %{"room_id" => room_id, "type" => call_type, "participants" => participants}}, state) do
+  defp handle_message(
+         %{
+           "type" => "initiate_call",
+           "data" => %{"room_id" => room_id, "type" => call_type, "participants" => participants}
+         },
+         state
+       ) do
     case Sup.Voice.CallService.initiate_call(state.user_id, participants, call_type) do
       {:ok, call} ->
         response =
@@ -438,7 +516,10 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "webrtc_signal", "data" => %{"call_id" => call_id, "signal" => signal}}, state) do
+  defp handle_message(
+         %{"type" => "webrtc_signal", "data" => %{"call_id" => call_id, "signal" => signal}},
+         state
+       ) do
     # Forward WebRTC signaling data
     response =
       Jason.encode!(%{
@@ -447,8 +528,12 @@ defmodule Sup.WebSocket.Handler do
       })
 
     # Broadcast to call participants
-    Phoenix.PubSub.broadcast(Sup.PubSub, "call:#{call_id}", {:webrtc_signal, signal, state.user_id})
-    
+    Phoenix.PubSub.broadcast(
+      Sup.PubSub,
+      "call:#{call_id}",
+      {:webrtc_signal, signal, state.user_id}
+    )
+
     {:reply, {:text, response}, state}
   end
 
@@ -520,7 +605,10 @@ defmodule Sup.WebSocket.Handler do
     end
   end
 
-  defp handle_message(%{"type" => "acknowledge_missed_messages", "data" => %{"message_ids" => message_ids}}, state) do
+  defp handle_message(
+         %{"type" => "acknowledge_missed_messages", "data" => %{"message_ids" => message_ids}},
+         state
+       ) do
     case Sup.Messaging.OfflineQueueService.mark_messages_received(state.user_id, message_ids) do
       :ok ->
         response =
@@ -545,7 +633,7 @@ defmodule Sup.WebSocket.Handler do
   # Presence and activity handlers
   defp handle_message(%{"type" => "update_presence", "data" => %{"status" => status}}, state) do
     PresenceService.update_user_status(state.user_id, status)
-    
+
     response =
       Jason.encode!(%{
         type: "presence_updated",
@@ -557,7 +645,7 @@ defmodule Sup.WebSocket.Handler do
 
   defp handle_message(%{"type" => "update_activity", "data" => activity}, state) do
     PresenceService.update_user_activity(state.user_id, activity)
-    
+
     response =
       Jason.encode!(%{
         type: "activity_updated",

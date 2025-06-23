@@ -281,25 +281,28 @@ defmodule Sup.ScyllaDB do
   end
 
   def handle_call({:get_thread_messages, thread_id, limit, before_timestamp}, _from, state) do
-    {query, params} = if before_timestamp do
-      query = """
-      SELECT id, room_id, sender_id, content, type, timestamp, reply_to_id
-      FROM #{state.keyspace}.thread_messages
-      WHERE thread_id = ? AND timestamp < ?
-      ORDER BY timestamp DESC
-      LIMIT ?
-      """
-      {query, [thread_id, before_timestamp, limit]}
-    else
-      query = """
-      SELECT id, room_id, sender_id, content, type, timestamp, reply_to_id
-      FROM #{state.keyspace}.thread_messages
-      WHERE thread_id = ?
-      ORDER BY timestamp DESC
-      LIMIT ?
-      """
-      {query, [thread_id, limit]}
-    end
+    {query, params} =
+      if before_timestamp do
+        query = """
+        SELECT id, room_id, sender_id, content, type, timestamp, reply_to_id
+        FROM #{state.keyspace}.thread_messages
+        WHERE thread_id = ? AND timestamp < ?
+        ORDER BY timestamp DESC
+        LIMIT ?
+        """
+
+        {query, [thread_id, before_timestamp, limit]}
+      else
+        query = """
+        SELECT id, room_id, sender_id, content, type, timestamp, reply_to_id
+        FROM #{state.keyspace}.thread_messages
+        WHERE thread_id = ?
+        ORDER BY timestamp DESC
+        LIMIT ?
+        """
+
+        {query, [thread_id, limit]}
+      end
 
     case Xandra.Cluster.execute(state.cluster, query, params) do
       {:ok, %Xandra.Page{} = page} ->

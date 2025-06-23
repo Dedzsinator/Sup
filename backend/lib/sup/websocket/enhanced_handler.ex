@@ -31,17 +31,19 @@ defmodule Sup.WebSocket.EnhancedHandler do
     # Get user's rooms and subscribe to them
     rooms = RoomService.get_user_rooms(user_id)
 
-    subscriptions = Enum.map(rooms, fn room ->
-      Phoenix.PubSub.subscribe(Sup.PubSub, "room:#{room.id}")
-      room.id
-    end)
+    subscriptions =
+      Enum.map(rooms, fn room ->
+        Phoenix.PubSub.subscribe(Sup.PubSub, "room:#{room.id}")
+        room.id
+      end)
 
     state = %__MODULE__{
       user_id: user_id,
       connection_id: connection_id,
       subscriptions: subscriptions,
       device_info: get_device_info(),
-      rate_limiter: nil  # Rate limiter will use the existing RateLimit module
+      # Rate limiter will use the existing RateLimit module
+      rate_limiter: nil
     }
 
     Logger.info("Enhanced WebSocket connected for user #{user_id}")
@@ -52,7 +54,7 @@ defmodule Sup.WebSocket.EnhancedHandler do
   def handle_in({text, [opcode: :text]}, state) do
     # Check rate limits using existing RateLimit module
     socket_stub = %{assigns: %{user_id: state.user_id}}
-    
+
     case RateLimit.check_rate_limit(socket_stub, :websocket) do
       :ok ->
         case Jason.decode(text) do
@@ -60,106 +62,132 @@ defmodule Sup.WebSocket.EnhancedHandler do
             handle_message(message, state)
 
           {:error, _} ->
-            error_response = Jason.encode!(%{
-              type: "error",
-              error: "invalid_json"
-            })
+            error_response =
+              Jason.encode!(%{
+                type: "error",
+                error: "invalid_json"
+              })
+
             {:reply, {:text, error_response}, state}
         end
 
       {:error, :rate_limit_exceeded} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: "rate_limit_exceeded"
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: "rate_limit_exceeded"
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
 
   @impl WebSock
   def handle_info({:message, message}, state) do
-    response = Jason.encode!(%{
-      type: "message",
-      data: message
-    })
+    response =
+      Jason.encode!(%{
+        type: "message",
+        data: message
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:reaction, reaction_data}, state) do
-    response = Jason.encode!(%{
-      type: "reaction",
-      data: reaction_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "reaction",
+        data: reaction_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:message_edited, edit_data}, state) do
-    response = Jason.encode!(%{
-      type: "message_edited",
-      data: edit_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "message_edited",
+        data: edit_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:message_deleted, delete_data}, state) do
-    response = Jason.encode!(%{
-      type: "message_deleted",
-      data: delete_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "message_deleted",
+        data: delete_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:presence_update, presence_data}, state) do
-    response = Jason.encode!(%{
-      type: "presence_update",
-      data: presence_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "presence_update",
+        data: presence_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:activity_update, activity_data}, state) do
-    response = Jason.encode!(%{
-      type: "activity_update",
-      data: activity_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "activity_update",
+        data: activity_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:voice_presence_update, voice_data}, state) do
-    response = Jason.encode!(%{
-      type: "voice_presence_update",
-      data: voice_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "voice_presence_update",
+        data: voice_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:delivery_receipt, data}, state) do
-    response = Jason.encode!(%{
-      type: "delivery_receipt",
-      data: data
-    })
+    response =
+      Jason.encode!(%{
+        type: "delivery_receipt",
+        data: data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:call_event, call_data}, state) do
-    response = Jason.encode!(%{
-      type: "call_event",
-      data: call_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "call_event",
+        data: call_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   def handle_info({:webrtc_signal, signal_data}, state) do
-    response = Jason.encode!(%{
-      type: "webrtc_signal",
-      data: signal_data
-    })
+    response =
+      Jason.encode!(%{
+        type: "webrtc_signal",
+        data: signal_data
+      })
+
     {:reply, {:text, response}, state}
   end
 
   @impl WebSock
   def terminate(reason, state) do
-    Logger.info("Enhanced WebSocket disconnected for user #{state.user_id}, reason: #{inspect(reason)}")
+    Logger.info(
+      "Enhanced WebSocket disconnected for user #{state.user_id}, reason: #{inspect(reason)}"
+    )
 
     # Clear user activities
     Enum.each(state.subscriptions, fn room_id ->
@@ -198,77 +226,109 @@ defmodule Sup.WebSocket.EnhancedHandler do
   defp handle_message(%{"type" => "send_thread_message", "data" => data}, state) do
     case EnhancedMessageService.create_thread(state.user_id, data["parent_message_id"], data) do
       {:ok, message} ->
-        response = Jason.encode!(%{
-          type: "thread_message_sent",
-          data: message
-        })
+        response =
+          Jason.encode!(%{
+            type: "thread_message_sent",
+            data: message
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
 
-  defp handle_message(%{"type" => "add_reaction", "data" => %{"message_id" => message_id, "emoji" => emoji}}, state) do
+  defp handle_message(
+         %{"type" => "add_reaction", "data" => %{"message_id" => message_id, "emoji" => emoji}},
+         state
+       ) do
     case EnhancedMessageService.add_reaction(state.user_id, message_id, emoji) do
       {:ok, _reaction} ->
         {:ok, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
 
-  defp handle_message(%{"type" => "remove_reaction", "data" => %{"message_id" => message_id, "emoji" => emoji}}, state) do
+  defp handle_message(
+         %{
+           "type" => "remove_reaction",
+           "data" => %{"message_id" => message_id, "emoji" => emoji}
+         },
+         state
+       ) do
     case EnhancedMessageService.remove_reaction(state.user_id, message_id, emoji) do
       {:ok, _reaction} ->
         {:ok, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
 
-  defp handle_message(%{"type" => "edit_message", "data" => %{"message_id" => message_id, "content" => content}}, state) do
+  defp handle_message(
+         %{
+           "type" => "edit_message",
+           "data" => %{"message_id" => message_id, "content" => content}
+         },
+         state
+       ) do
     case EnhancedMessageService.edit_message(state.user_id, message_id, content) do
       {:ok, result} ->
-        response = Jason.encode!(%{
-          type: "message_edit_confirmed",
-          data: result
-        })
+        response =
+          Jason.encode!(%{
+            type: "message_edit_confirmed",
+            data: result
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
 
-  defp handle_message(%{"type" => "delete_message", "data" => %{"message_id" => message_id}}, state) do
+  defp handle_message(
+         %{"type" => "delete_message", "data" => %{"message_id" => message_id}},
+         state
+       ) do
     case EnhancedMessageService.delete_message(state.user_id, message_id) do
       {:ok, _} ->
         {:ok, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -313,7 +373,10 @@ defmodule Sup.WebSocket.EnhancedHandler do
     {:ok, state}
   end
 
-  defp handle_message(%{"type" => "mark_thread_read", "data" => %{"thread_id" => thread_id}}, state) do
+  defp handle_message(
+         %{"type" => "mark_thread_read", "data" => %{"thread_id" => thread_id}},
+         state
+       ) do
     EnhancedMessageService.mark_thread_read(thread_id, state.user_id)
     {:ok, state}
   end
@@ -326,10 +389,12 @@ defmodule Sup.WebSocket.EnhancedHandler do
         {:ok, %{state | subscriptions: new_subscriptions}}
 
       false ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: "unauthorized_room_access"
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: "unauthorized_room_access"
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -346,17 +411,21 @@ defmodule Sup.WebSocket.EnhancedHandler do
           String.to_existing_atom(call.call_type)
         )
 
-        response = Jason.encode!(%{
-          type: "call_initiated",
-          data: call
-        })
+        response =
+          Jason.encode!(%{
+            type: "call_initiated",
+            data: call
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -375,10 +444,12 @@ defmodule Sup.WebSocket.EnhancedHandler do
         {:ok, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -398,20 +469,24 @@ defmodule Sup.WebSocket.EnhancedHandler do
   defp handle_message(%{"type" => "search_messages", "data" => data}, state) do
     case EnhancedMessageService.search_messages(state.user_id, data["query"], data) do
       {:ok, results} ->
-        response = Jason.encode!(%{
-          type: "search_results",
-          data: %{
-            query: data["query"],
-            results: results
-          }
-        })
+        response =
+          Jason.encode!(%{
+            type: "search_results",
+            data: %{
+              query: data["query"],
+              results: results
+            }
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -419,17 +494,21 @@ defmodule Sup.WebSocket.EnhancedHandler do
   defp handle_message(%{"type" => "get_mentions", "data" => _data}, state) do
     case EnhancedMessageService.search_mentions(state.user_id) do
       {:ok, mentions} ->
-        response = Jason.encode!(%{
-          type: "mentions",
-          data: mentions
-        })
+        response =
+          Jason.encode!(%{
+            type: "mentions",
+            data: mentions
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -438,10 +517,11 @@ defmodule Sup.WebSocket.EnhancedHandler do
   defp handle_message(message, state) do
     Logger.warning("Unknown message type: #{inspect(message)}")
 
-    error_response = Jason.encode!(%{
-      type: "error",
-      error: "unknown_message_type"
-    })
+    error_response =
+      Jason.encode!(%{
+        type: "error",
+        error: "unknown_message_type"
+      })
 
     {:reply, {:text, error_response}, state}
   end
@@ -450,17 +530,21 @@ defmodule Sup.WebSocket.EnhancedHandler do
   defp handle_encrypted_message_send(data, state) do
     case EnhancedMessageService.send_encrypted_message(state.user_id, data) do
       {:ok, message} ->
-        response = Jason.encode!(%{
-          type: "message_sent",
-          data: Map.put(message, :encrypted, true)
-        })
+        response =
+          Jason.encode!(%{
+            type: "message_sent",
+            data: Map.put(message, :encrypted, true)
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
@@ -468,24 +552,29 @@ defmodule Sup.WebSocket.EnhancedHandler do
   defp handle_regular_message_send(data, state) do
     case EnhancedMessageService.send_message(state.user_id, data) do
       {:ok, message} ->
-        response = Jason.encode!(%{
-          type: "message_sent",
-          data: message
-        })
+        response =
+          Jason.encode!(%{
+            type: "message_sent",
+            data: message
+          })
+
         {:reply, {:text, response}, state}
 
       {:error, reason} ->
-        error_response = Jason.encode!(%{
-          type: "error",
-          error: reason
-        })
+        error_response =
+          Jason.encode!(%{
+            type: "error",
+            error: reason
+          })
+
         {:reply, {:text, error_response}, state}
     end
   end
 
   defp get_device_info do
     %{
-      platform: "web", # Could be determined from user agent
+      # Could be determined from user agent
+      platform: "web",
       version: "1.0.0",
       connected_at: DateTime.utc_now()
     }

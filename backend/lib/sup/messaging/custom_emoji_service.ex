@@ -23,7 +23,6 @@ defmodule Sup.Messaging.CustomEmojiService do
          :ok <- validate_user_permissions(user_id, emoji_data["room_id"]),
          {:ok, processed_emoji} <- process_emoji_file(emoji_data),
          {:ok, emoji} <- create_emoji_record(user_id, processed_emoji, emoji_data) do
-
       # Broadcast emoji creation to room
       broadcast_emoji_event(emoji_data["room_id"], :emoji_created, emoji)
 
@@ -39,11 +38,13 @@ defmodule Sup.Messaging.CustomEmojiService do
   def get_room_emojis(room_id, user_id) do
     case RoomService.can_access_room?(user_id, room_id) do
       true ->
-        emojis = from(e in CustomEmoji,
-                     where: e.room_id == ^room_id and e.is_active == true,
-                     order_by: [asc: e.name])
-                |> Repo.all()
-                |> Enum.map(&CustomEmoji.public_fields/1)
+        emojis =
+          from(e in CustomEmoji,
+            where: e.room_id == ^room_id and e.is_active == true,
+            order_by: [asc: e.name]
+          )
+          |> Repo.all()
+          |> Enum.map(&CustomEmoji.public_fields/1)
 
         {:ok, emojis}
 
@@ -56,11 +57,13 @@ defmodule Sup.Messaging.CustomEmojiService do
   Get global custom emojis (available to all users)
   """
   def get_global_emojis do
-    emojis = from(e in CustomEmoji,
-                 where: is_nil(e.room_id) and e.is_active == true,
-                 order_by: [asc: e.name])
-            |> Repo.all()
-            |> Enum.map(&CustomEmoji.public_fields/1)
+    emojis =
+      from(e in CustomEmoji,
+        where: is_nil(e.room_id) and e.is_active == true,
+        order_by: [asc: e.name]
+      )
+      |> Repo.all()
+      |> Enum.map(&CustomEmoji.public_fields/1)
 
     {:ok, emojis}
   end
@@ -71,25 +74,31 @@ defmodule Sup.Messaging.CustomEmojiService do
   def search_emojis(query, user_id, room_id \\ nil) do
     search_term = "%#{String.downcase(query)}%"
 
-    base_query = from(e in CustomEmoji,
-                     where: e.is_active == true and
-                            (ilike(e.name, ^search_term) or
-                             fragment("? @> ?", e.tags, ^[String.downcase(query)])),
-                     order_by: [asc: e.name],
-                     limit: 20)
+    base_query =
+      from(e in CustomEmoji,
+        where:
+          e.is_active == true and
+            (ilike(e.name, ^search_term) or
+               fragment("? @> ?", e.tags, ^[String.downcase(query)])),
+        order_by: [asc: e.name],
+        limit: 20
+      )
 
-    query = if room_id do
-      # Include room-specific and global emojis
-      from(e in base_query,
-           where: e.room_id == ^room_id or is_nil(e.room_id))
-    else
-      # Only global emojis
-      from(e in base_query, where: is_nil(e.room_id))
-    end
+    query =
+      if room_id do
+        # Include room-specific and global emojis
+        from(e in base_query,
+          where: e.room_id == ^room_id or is_nil(e.room_id)
+        )
+      else
+        # Only global emojis
+        from(e in base_query, where: is_nil(e.room_id))
+      end
 
-    emojis = query
-            |> Repo.all()
-            |> Enum.map(&CustomEmoji.public_fields/1)
+    emojis =
+      query
+      |> Repo.all()
+      |> Enum.map(&CustomEmoji.public_fields/1)
 
     {:ok, emojis}
   end
@@ -181,18 +190,20 @@ defmodule Sup.Messaging.CustomEmojiService do
   def import_emoji_pack(user_id, room_id, pack_data) do
     case RoomService.is_room_admin?(user_id, room_id) do
       true ->
-        results = Enum.map(pack_data["emojis"], fn emoji_data ->
-          import_single_emoji(user_id, room_id, emoji_data)
-        end)
+        results =
+          Enum.map(pack_data["emojis"], fn emoji_data ->
+            import_single_emoji(user_id, room_id, emoji_data)
+          end)
 
         success_count = Enum.count(results, fn {status, _} -> status == :ok end)
         error_count = length(results) - success_count
 
-        {:ok, %{
-          imported: success_count,
-          errors: error_count,
-          results: results
-        }}
+        {:ok,
+         %{
+           imported: success_count,
+           errors: error_count,
+           results: results
+         }}
 
       false ->
         {:error, "unauthorized"}
@@ -205,9 +216,11 @@ defmodule Sup.Messaging.CustomEmojiService do
   def export_emoji_pack(room_id, user_id) do
     case RoomService.is_room_admin?(user_id, room_id) do
       true ->
-        emojis = from(e in CustomEmoji,
-                     where: e.room_id == ^room_id and e.is_active == true)
-                |> Repo.all()
+        emojis =
+          from(e in CustomEmoji,
+            where: e.room_id == ^room_id and e.is_active == true
+          )
+          |> Repo.all()
 
         pack_data = %{
           name: "Room Emoji Pack",
@@ -229,9 +242,10 @@ defmodule Sup.Messaging.CustomEmojiService do
   defp validate_emoji_data(emoji_data) do
     required_fields = ["name", "file_data", "content_type"]
 
-    missing_fields = Enum.filter(required_fields, fn field ->
-      not Map.has_key?(emoji_data, field) or is_nil(emoji_data[field])
-    end)
+    missing_fields =
+      Enum.filter(required_fields, fn field ->
+        not Map.has_key?(emoji_data, field) or is_nil(emoji_data[field])
+      end)
 
     if length(missing_fields) > 0 do
       {:error, "missing_fields: #{Enum.join(missing_fields, ", ")}"}
@@ -312,14 +326,15 @@ defmodule Sup.Messaging.CustomEmojiService do
         # Optimize and resize if needed
         optimized_path = optimize_emoji_file(file_path, emoji_data["content_type"])
 
-        {:ok, %{
-          original_filename: emoji_data["filename"] || unique_filename,
-          stored_filename: unique_filename,
-          file_path: optimized_path || file_path,
-          content_type: emoji_data["content_type"],
-          file_size: byte_size(emoji_data["file_data"]),
-          checksum: generate_file_checksum(emoji_data["file_data"])
-        }}
+        {:ok,
+         %{
+           original_filename: emoji_data["filename"] || unique_filename,
+           stored_filename: unique_filename,
+           file_path: optimized_path || file_path,
+           content_type: emoji_data["content_type"],
+           file_size: byte_size(emoji_data["file_data"]),
+           checksum: generate_file_checksum(emoji_data["file_data"])
+         }}
 
       {:error, reason} ->
         {:error, "file_write_failed: #{reason}"}
@@ -372,10 +387,8 @@ defmodule Sup.Messaging.CustomEmojiService do
     cond do
       # Creator can always modify
       emoji.created_by == user_id -> true
-
       # Global emoji requires admin
       is_nil(emoji.room_id) -> is_admin_user?(user_id)
-
       # Room emoji requires room admin
       true -> RoomService.is_room_admin?(user_id, emoji.room_id)
     end
@@ -471,19 +484,23 @@ defmodule Sup.Messaging.CustomEmojiService do
     tags = emoji_data["tags"] || []
 
     # Add automatic tags based on name
-    automatic_tags = emoji_data["name"]
-                    |> String.split(~r/[_-]/)
-                    |> Enum.map(&String.downcase/1)
-                    |> Enum.reject(&(String.length(&1) < 2))
+    automatic_tags =
+      emoji_data["name"]
+      |> String.split(~r/[_-]/)
+      |> Enum.map(&String.downcase/1)
+      |> Enum.reject(&(String.length(&1) < 2))
 
     (tags ++ automatic_tags)
     |> Enum.uniq()
-    |> Enum.take(10)  # Limit to 10 tags
+    # Limit to 10 tags
+    |> Enum.take(10)
   end
 
   defp delete_emoji_file(file_path) do
     case File.rm(file_path) do
-      :ok -> :ok
+      :ok ->
+        :ok
+
       {:error, reason} ->
         Logger.error("Failed to delete emoji file #{file_path}: #{reason}")
     end

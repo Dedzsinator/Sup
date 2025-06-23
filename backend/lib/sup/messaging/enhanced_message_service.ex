@@ -19,22 +19,31 @@ defmodule Sup.Messaging.EnhancedMessageService do
   @supported_message_types [:text, :image, :file, :audio, :video, :sticker, :location, :contact]
 
   # Enhanced message sending with E2E encryption
-  def send_encrypted_message(sender_id, %{"room_id" => room_id, "content" => content, "type" => type} = params) do
+  def send_encrypted_message(
+        sender_id,
+        %{"room_id" => room_id, "content" => content, "type" => type} = params
+      ) do
     case RoomService.can_send_message?(sender_id, room_id) do
       true ->
         recipients = get_room_recipients(room_id, sender_id)
-        
+
         # Encrypt message for each recipient
-        encrypted_messages = Enum.map(recipients, fn recipient_id ->
-          case SignalProtocol.encrypt_message(sender_id, recipient_id, content) do
-            {:ok, encrypted_message} -> encrypted_message
-            {:error, "no_session"} ->
-              # Establish session and retry
-              establish_e2e_session(sender_id, recipient_id)
-              {:ok, encrypted_message} = SignalProtocol.encrypt_message(sender_id, recipient_id, content)
-              encrypted_message
-          end
-        end)
+        encrypted_messages =
+          Enum.map(recipients, fn recipient_id ->
+            case SignalProtocol.encrypt_message(sender_id, recipient_id, content) do
+              {:ok, encrypted_message} ->
+                encrypted_message
+
+              {:error, "no_session"} ->
+                # Establish session and retry
+                establish_e2e_session(sender_id, recipient_id)
+
+                {:ok, encrypted_message} =
+                  SignalProtocol.encrypt_message(sender_id, recipient_id, content)
+
+                encrypted_message
+            end
+          end)
 
         message_id = generate_message_id()
         timestamp = DateTime.utc_now()
@@ -86,7 +95,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
             # Process rich media if present
             if params["media_url"] do
-              Task.start(fn -> 
+              Task.start(fn ->
                 RichMediaService.process_media_message(message_id, params["media_url"])
               end)
             end
@@ -135,7 +144,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
         case ScyllaDB.insert_message(message_attrs) do
           :ok ->
             create_delivery_receipts(message_id, params["room_id"], sender_id)
-            
+
             if params["reply_to_id"] do
               update_thread_activity(message_id, params["reply_to_id"])
             end
@@ -221,6 +230,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
         # Queue for offline users
         message = get_message(message_id)
+
         OfflineQueueService.queue_message(message.sender_id, %{
           type: "reaction",
           message_id: message_id,
@@ -231,7 +241,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
         broadcast_reaction(reaction, "added")
         {:ok, reaction}
-      
+
       {:error, changeset} ->
         {:error, changeset}
     end
@@ -241,7 +251,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
     case Repo.get_by(MessageReaction, user_id: user_id, message_id: message_id, emoji: emoji) do
       nil ->
         {:error, "reaction_not_found"}
-      
+
       reaction ->
         case Repo.delete(reaction) do
           {:ok, reaction} ->
@@ -259,7 +269,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
             broadcast_reaction(reaction, "removed")
             {:ok, reaction}
-          
+
           {:error, changeset} ->
             {:error, changeset}
         end
@@ -273,26 +283,27 @@ defmodule Sup.Messaging.EnhancedMessageService do
         parent_message = get_message(parent_message_id)
         thread_id = parent_message.thread_id || parent_message_id
 
-        thread_params = Map.merge(params, %{
-          "room_id" => parent_message.room_id,
-          "thread_id" => thread_id,
-          "reply_to_id" => parent_message_id
-        })
+        thread_params =
+          Map.merge(params, %{
+            "room_id" => parent_message.room_id,
+            "thread_id" => thread_id,
+            "reply_to_id" => parent_message_id
+          })
 
         case send_message(user_id, thread_params) do
           {:ok, message} ->
             # Create or update thread metadata
             upsert_thread_metadata(thread_id, parent_message.room_id, user_id)
-            
+
             # Track analytics
             AnalyticsService.track_event(user_id, "thread_message_sent", %{
               thread_id: thread_id,
               parent_message_id: parent_message_id,
               room_id: parent_message.room_id
             })
-            
+
             {:ok, message}
-          
+
           error ->
             error
         end
@@ -306,7 +317,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
     case can_access_thread?(user_id, thread_id) do
       true ->
         ScyllaDB.get_thread_messages(thread_id, limit, before_timestamp)
-      
+
       false ->
         {:error, "unauthorized"}
     end
@@ -327,7 +338,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
         }
 
         ScyllaDB.search_messages(query, search_filters)
-      
+
       false ->
         {:error, "unauthorized"}
     end
@@ -345,22 +356,29 @@ defmodule Sup.Messaging.EnhancedMessageService do
     case can_edit_message?(user_id, message_id) do
       true ->
         timestamp = DateTime.utc_now()
-        
+
         case ScyllaDB.update_message(message_id, %{
-          content: new_content,
-          edited_at: timestamp
-        }) do
+               content: new_content,
+               edited_at: timestamp
+             }) do
           :ok ->
             # Broadcast edit
             broadcast_message_edit(message_id, new_content, timestamp)
-            
+
             # Audit log
-            AuditLog.log_data_modification("message", message_id, "edit", %{
-              new_content_length: String.length(new_content)
-            }, user_id, %{})
-            
+            AuditLog.log_data_modification(
+              "message",
+              message_id,
+              "edit",
+              %{
+                new_content_length: String.length(new_content)
+              },
+              user_id,
+              %{}
+            )
+
             {:ok, %{message_id: message_id, edited_at: timestamp}}
-          
+
           {:error, reason} ->
             {:error, reason}
         end
@@ -381,12 +399,12 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
             # Broadcast deletion
             broadcast_message_deletion(message_id)
-            
+
             # Audit log
             AuditLog.log_data_modification("message", message_id, "delete", %{}, user_id, %{})
-            
+
             {:ok, message_id}
-          
+
           {:error, reason} ->
             {:error, reason}
         end
@@ -403,16 +421,17 @@ defmodule Sup.Messaging.EnhancedMessageService do
         {:error, "receipt_not_found"}
 
       receipt ->
-        changeset = DeliveryReceipt.changeset(receipt, %{
-          read_at: DateTime.utc_now(),
-          status: :read
-        })
+        changeset =
+          DeliveryReceipt.changeset(receipt, %{
+            read_at: DateTime.utc_now(),
+            status: :read
+          })
 
         case Repo.update(changeset) do
           {:ok, updated_receipt} ->
             # Broadcast read receipt to sender
             broadcast_delivery_receipt(updated_receipt)
-            
+
             # Update thread read status if applicable
             if receipt.thread_id do
               update_thread_read_status(receipt.thread_id, user_id)
@@ -428,7 +447,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
               read_receipt: updated_receipt,
               action: "read"
             })
-            
+
             {:ok, updated_receipt}
 
           {:error, changeset} ->
@@ -440,11 +459,11 @@ defmodule Sup.Messaging.EnhancedMessageService do
   def mark_thread_read(thread_id, user_id) do
     # Mark all messages in thread as read
     thread_messages = ScyllaDB.get_thread_messages(thread_id, 1000)
-    
+
     Enum.each(thread_messages, fn message ->
       mark_message_read(message.id, user_id)
     end)
-    
+
     {:ok, thread_id}
   end
 
@@ -489,7 +508,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
   defp update_thread_activity(message_id, parent_message_id) do
     # Update thread with latest activity
     thread_id = get_thread_id(parent_message_id)
-    
+
     MessageThread.changeset(%MessageThread{}, %{
       thread_id: thread_id,
       last_message_id: message_id,
@@ -524,12 +543,16 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
   defp can_edit_message?(user_id, message_id) do
     message = get_message(message_id)
-    message && (message.sender_id == user_id || RoomService.is_room_admin?(user_id, message.room_id))
+
+    message &&
+      (message.sender_id == user_id || RoomService.is_room_admin?(user_id, message.room_id))
   end
 
   defp can_delete_message?(user_id, message_id) do
     message = get_message(message_id)
-    message && (message.sender_id == user_id || RoomService.is_room_admin?(user_id, message.room_id))
+
+    message &&
+      (message.sender_id == user_id || RoomService.is_room_admin?(user_id, message.room_id))
   end
 
   defp can_access_thread?(user_id, thread_id) do
@@ -566,8 +589,9 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
   defp broadcast_reaction(reaction, action) do
     message = get_message(reaction.message_id)
+
     Phoenix.PubSub.broadcast(Sup.PubSub, "room:#{message.room_id}", {
-      :reaction, 
+      :reaction,
       %{
         action: action,
         message_id: reaction.message_id,
@@ -579,6 +603,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
   defp broadcast_message_edit(message_id, new_content, edited_at) do
     message = get_message(message_id)
+
     Phoenix.PubSub.broadcast(Sup.PubSub, "room:#{message.room_id}", {
       :message_edited,
       %{
@@ -591,6 +616,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
   defp broadcast_message_deletion(message_id) do
     message = get_message(message_id)
+
     Phoenix.PubSub.broadcast(Sup.PubSub, "room:#{message.room_id}", {
       :message_deleted,
       %{message_id: message_id}
@@ -603,25 +629,27 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
   defp create_delivery_receipts(message_id, room_id, sender_id) do
     # Get all room members except sender
-    members = RoomService.get_room_members(room_id)
-    |> Enum.reject(&(&1.id == sender_id))
+    members =
+      RoomService.get_room_members(room_id)
+      |> Enum.reject(&(&1.id == sender_id))
 
-    receipts = Enum.map(members, fn member ->
-      %{
-        id: Ecto.UUID.generate(),
-        message_id: message_id,
-        user_id: member.id,
-        status: :sent,
-        sent_at: DateTime.utc_now()
-      }
-    end)
+    receipts =
+      Enum.map(members, fn member ->
+        %{
+          id: Ecto.UUID.generate(),
+          message_id: message_id,
+          user_id: member.id,
+          status: :sent,
+          sent_at: DateTime.utc_now()
+        }
+      end)
 
     Repo.insert_all(DeliveryReceipt, receipts)
   end
 
   defp queue_for_offline_users(message) do
     room_members = RoomService.get_room_members(message.room_id)
-    
+
     Enum.each(room_members, fn member ->
       unless member.id == message.sender_id do
         OfflineQueueService.queue_message(member.id, %{

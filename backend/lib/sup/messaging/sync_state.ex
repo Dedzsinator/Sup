@@ -23,7 +23,13 @@ defmodule Sup.Messaging.SyncState do
     sync_state
     |> cast(attrs, [:user_id, :device_id, :state_type, :state_data, :sync_timestamp])
     |> validate_required([:user_id, :device_id, :state_type, :state_data, :sync_timestamp])
-    |> validate_inclusion(:state_type, ["messages", "read_status", "typing", "presence", "settings"])
+    |> validate_inclusion(:state_type, [
+      "messages",
+      "read_status",
+      "typing",
+      "presence",
+      "settings"
+    ])
   end
 
   def public_fields(sync_state) do

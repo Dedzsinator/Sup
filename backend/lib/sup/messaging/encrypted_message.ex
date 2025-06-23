@@ -25,12 +25,22 @@ defmodule Sup.Messaging.EncryptedMessage do
   def changeset(encrypted_message, attrs) do
     encrypted_message
     |> cast(attrs, [
-      :sender_id, :recipient_id, :session_id, :message_number,
-      :ciphertext, :auth_tag, :ephemeral_key, :decrypted
+      :sender_id,
+      :recipient_id,
+      :session_id,
+      :message_number,
+      :ciphertext,
+      :auth_tag,
+      :ephemeral_key,
+      :decrypted
     ])
     |> validate_required([
-      :sender_id, :recipient_id, :session_id, :message_number,
-      :ciphertext, :auth_tag
+      :sender_id,
+      :recipient_id,
+      :session_id,
+      :message_number,
+      :ciphertext,
+      :auth_tag
     ])
   end
 end

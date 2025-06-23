@@ -108,16 +108,26 @@ defmodule Sup.Messaging.SignalProtocol do
     ephemeral_keypair = :crypto.generate_key(:ecdh, :x25519)
 
     # Perform X3DH key exchange
-    dh1 = :crypto.compute_key(:ecdh, key_bundle.signed_prekey, identity_key_sender.private_key, :x25519)
+    dh1 =
+      :crypto.compute_key(
+        :ecdh,
+        key_bundle.signed_prekey,
+        identity_key_sender.private_key,
+        :x25519
+      )
+
     dh2 = :crypto.compute_key(:ecdh, key_bundle.identity_key, elem(ephemeral_keypair, 1), :x25519)
-    dh3 = :crypto.compute_key(:ecdh, key_bundle.signed_prekey, elem(ephemeral_keypair, 1), :x25519)
+
+    dh3 =
+      :crypto.compute_key(:ecdh, key_bundle.signed_prekey, elem(ephemeral_keypair, 1), :x25519)
 
     # Optional one-time prekey DH
-    dh4 = if key_bundle.prekey do
-      :crypto.compute_key(:ecdh, key_bundle.prekey, elem(ephemeral_keypair, 1), :x25519)
-    else
-      <<>>
-    end
+    dh4 =
+      if key_bundle.prekey do
+        :crypto.compute_key(:ecdh, key_bundle.prekey, elem(ephemeral_keypair, 1), :x25519)
+      else
+        <<>>
+      end
 
     # Derive initial root key
     kdf_input = dh1 <> dh2 <> dh3 <> dh4
@@ -147,11 +157,19 @@ defmodule Sup.Messaging.SignalProtocol do
 
     if session do
       # Generate message key from chain key
-      message_key = :crypto.hash(:sha256, session.chain_key_send <> <<session.message_number_send::32>>)
+      message_key =
+        :crypto.hash(:sha256, session.chain_key_send <> <<session.message_number_send::32>>)
 
       # Encrypt message using AES-256-GCM
-      {ciphertext, tag} = :crypto.crypto_one_time_aead(:aes_256_gcm, message_key,
-        :crypto.strong_rand_bytes(12), plaintext, <<>>, true)
+      {ciphertext, tag} =
+        :crypto.crypto_one_time_aead(
+          :aes_256_gcm,
+          message_key,
+          :crypto.strong_rand_bytes(12),
+          plaintext,
+          <<>>,
+          true
+        )
 
       encrypted_message = %{
         sender_id: sender_id,
@@ -183,12 +201,19 @@ defmodule Sup.Messaging.SignalProtocol do
 
     if session do
       # Generate message key
-      message_key = :crypto.hash(:sha256, session.chain_key_recv <> <<encrypted_message.message_number::32>>)
+      message_key =
+        :crypto.hash(:sha256, session.chain_key_recv <> <<encrypted_message.message_number::32>>)
 
       # Decrypt message
-      case :crypto.crypto_one_time_aead(:aes_256_gcm, message_key,
-        :crypto.strong_rand_bytes(12), encrypted_message.ciphertext, <<>>,
-        encrypted_message.auth_tag, false) do
+      case :crypto.crypto_one_time_aead(
+             :aes_256_gcm,
+             message_key,
+             :crypto.strong_rand_bytes(12),
+             encrypted_message.ciphertext,
+             <<>>,
+             encrypted_message.auth_tag,
+             false
+           ) do
         plaintext when is_binary(plaintext) ->
           # Update session state
           new_chain_key = :crypto.hash(:sha256, session.chain_key_recv)
