@@ -16,13 +16,14 @@ defmodule Sup.SpamDetection.Service do
     # Check message for spam
     spam_result = Client.check_spam_with_fallback(message, user_id, timestamp)
 
-    # Extract spam detection results
+    # Extract spam detection results from updated API
     is_spam = Map.get(spam_result, "is_spam", false)
-    spam_probability = Map.get(spam_result, "spam_probability", 0.0)
     confidence = Map.get(spam_result, "confidence", 0.0)
+    model_type = Map.get(spam_result, "model_type", "unknown")
+    processing_time = Map.get(spam_result, "processing_time_ms", 0.0)
 
     Logger.info(
-      "Spam detection result for user #{user_id}: is_spam=#{is_spam}, probability=#{spam_probability}, confidence=#{confidence}"
+      "Spam detection result for user #{user_id}: is_spam=#{is_spam}, confidence=#{confidence}, model=#{model_type}, time=#{processing_time}ms"
     )
 
     cond do
@@ -33,8 +34,8 @@ defmodule Sup.SpamDetection.Service do
         {:error, :spam_detected,
          %{
            reason: "Message blocked by spam detection",
-           spam_probability: spam_probability,
-           confidence: confidence
+           confidence: confidence,
+           model_type: model_type
          }}
 
       # Medium confidence spam - flag for review but allow
@@ -44,8 +45,8 @@ defmodule Sup.SpamDetection.Service do
         # Send message but mark as flagged
         case MessageService.send_message(user_id, room_id, message, %{
                flagged_as_spam: true,
-               spam_probability: spam_probability,
-               spam_confidence: confidence
+               spam_confidence: confidence,
+               spam_model_type: model_type
              }) do
           {:ok, message_data} ->
             # Submit as training data (assuming it's spam for now)

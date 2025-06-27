@@ -1,0 +1,5 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/home/deginandor/Documents/Programming/Sup/autocomplete/api_server.py", line 20, in <module>
+    import uvicorn
+ModuleNotFoundError: No module named 'uvicorn'

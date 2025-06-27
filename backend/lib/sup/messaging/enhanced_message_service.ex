@@ -10,6 +10,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
   alias Sup.Media.RichMediaService
   alias Sup.Sync.MultiDeviceSyncService
   alias Sup.Room.RoomService
+  alias Sup.SpamDetection.Service, as: SpamDetectionService
   alias Sup.Repo
   alias Sup.ScyllaDB
   alias Sup.Security.AuditLog
@@ -125,59 +126,85 @@ defmodule Sup.Messaging.EnhancedMessageService do
   def send_message(sender_id, params) do
     case RoomService.can_send_message?(sender_id, params["room_id"]) do
       true ->
-        message_id = generate_message_id()
-        timestamp = DateTime.utc_now()
+        # Check for spam before processing the message
+        case SpamDetectionService.process_message(
+               params["content"],
+               sender_id,
+               params["room_id"]
+             ) do
+          {:error, :spam_detected, spam_info} ->
+            Logger.warning("Spam message blocked from user #{sender_id}: #{inspect(spam_info)}")
+            {:error, :spam_detected}
 
-        message_attrs = %{
-          id: message_id,
-          sender_id: sender_id,
-          room_id: params["room_id"],
-          content: params["content"],
-          type: String.to_existing_atom(params["type"] || "text"),
-          timestamp: timestamp,
-          reply_to_id: Map.get(params, "reply_to_id"),
-          thread_id: Map.get(params, "thread_id"),
-          is_encrypted: false,
-          metadata: build_message_metadata(params)
-        }
+          {:ok, message_data} ->
+            # Message was already processed and sent by spam detection service
+            {:ok, message_data}
 
-        case ScyllaDB.insert_message(message_attrs) do
-          :ok ->
-            create_delivery_receipts(message_id, params["room_id"], sender_id)
+          # If spam detection returns the original content, continue with normal processing
+          {:ok, _processed_content} ->
+            process_normal_message(sender_id, params)
 
-            if params["reply_to_id"] do
-              update_thread_activity(message_id, params["reply_to_id"])
-            end
-
-            # Process for bot commands
-            BotService.process_message_for_bots(message_attrs)
-
-            # Track analytics
-            AnalyticsService.track_event(sender_id, "message_sent", %{
-              room_id: params["room_id"],
-              encrypted: false,
-              content_length: String.length(params["content"]),
-              message_type: params["type"]
-            })
-
-            # Queue for offline users
-            queue_for_offline_users(message_attrs)
-
-            # Sync to other devices
-            MultiDeviceSyncService.sync_message_data(sender_id, %{
-              message: message_attrs,
-              action: "sent"
-            })
-
-            broadcast_message(message_attrs)
-            {:ok, message_attrs}
-
-          {:error, reason} ->
-            {:error, reason}
+          # If spam detection fails, continue with normal processing (fail-open)
+          _other ->
+            Logger.warning("Spam detection failed for user #{sender_id}, proceeding with message")
+            process_normal_message(sender_id, params)
         end
 
       false ->
-        {:error, "unauthorized"}
+        {:error, :unauthorized}
+    end
+  end
+
+  defp process_normal_message(sender_id, params) do
+    message_id = generate_message_id()
+    timestamp = DateTime.utc_now()
+
+    message_attrs = %{
+      id: message_id,
+      sender_id: sender_id,
+      room_id: params["room_id"],
+      content: params["content"],
+      type: String.to_existing_atom(params["type"] || "text"),
+      timestamp: timestamp,
+      reply_to_id: Map.get(params, "reply_to_id"),
+      thread_id: Map.get(params, "thread_id"),
+      is_encrypted: false,
+      metadata: build_message_metadata(params)
+    }
+
+    case ScyllaDB.insert_message(message_attrs) do
+      :ok ->
+        create_delivery_receipts(message_id, params["room_id"], sender_id)
+
+        if params["reply_to_id"] do
+          update_thread_activity(message_id, params["reply_to_id"])
+        end
+
+        # Process for bot commands
+        BotService.process_message_for_bots(message_attrs)
+
+        # Track analytics
+        AnalyticsService.track_event(sender_id, "message_sent", %{
+          room_id: params["room_id"],
+          encrypted: false,
+          content_length: String.length(params["content"]),
+          message_type: params["type"]
+        })
+
+        # Queue for offline users
+        queue_for_offline_users(message_attrs)
+
+        # Sync to other devices
+        MultiDeviceSyncService.sync_message_data(sender_id, %{
+          message: message_attrs,
+          action: "sent"
+        })
+
+        broadcast_message(message_attrs)
+        {:ok, message_attrs}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

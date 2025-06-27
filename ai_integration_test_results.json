@@ -1,0 +1,14 @@
+{
+  "spam_detection": {
+    "status": "unreachable",
+    "tests": []
+  },
+  "autocomplete": {
+    "status": "unreachable",
+    "tests": []
+  },
+  "backend_integration": {
+    "status": "manual_verification_needed",
+    "tests": []
+  }
+}

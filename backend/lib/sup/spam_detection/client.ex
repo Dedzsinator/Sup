@@ -5,23 +5,26 @@ defmodule Sup.SpamDetection.Client do
 
   require Logger
 
-  @base_url Application.get_env(:sup, :spam_detection_url, "http://localhost:8080")
+  @base_url Application.get_env(:sup, :spam_detection_url, "http://localhost:8082")
   @api_key Application.get_env(:sup, :spam_detection_api_key, "your-secret-api-key")
   @timeout 5000
 
   def check_spam(message, user_id, timestamp \\ nil) do
-    timestamp = timestamp || DateTime.utc_now()
-
+    # Updated to match the current spam detection API structure
     payload = %{
-      message: message,
-      user_id: user_id,
-      timestamp: DateTime.to_iso8601(timestamp)
+      text: message,
+      user_id: user_id || "anonymous",
+      metadata: %{
+        timestamp: timestamp || DateTime.utc_now() |> DateTime.to_iso8601()
+      }
     }
 
-    headers = [
-      {"Authorization", "Bearer #{@api_key}"},
-      {"Content-Type", "application/json"}
-    ]
+    # Updated headers - API key is optional for current server
+    headers = case @api_key do
+      "your-secret-api-key" -> [{"Content-Type", "application/json"}]
+      key when is_binary(key) -> [{"Authorization", "Bearer #{key}"}, {"Content-Type", "application/json"}]
+      _ -> [{"Content-Type", "application/json"}]
+    end
 
     case HTTPoison.post("#{@base_url}/predict", Jason.encode!(payload), headers,
            recv_timeout: @timeout
@@ -52,34 +55,45 @@ defmodule Sup.SpamDetection.Client do
   end
 
   def check_spam_batch(messages) when is_list(messages) do
+    # Updated to match current spam detection API structure
     batch_messages =
       Enum.map(messages, fn msg_data ->
-        base_msg = %{
-          message: Map.get(msg_data, :message),
-          user_id: Map.get(msg_data, :user_id)
+        %{
+          text: Map.get(msg_data, :message) || Map.get(msg_data, :text),
+          user_id: Map.get(msg_data, :user_id) || "anonymous",
+          metadata: %{
+            timestamp: case Map.get(msg_data, :timestamp) do
+              nil -> DateTime.utc_now() |> DateTime.to_iso8601()
+              timestamp -> DateTime.to_iso8601(timestamp)
+            end
+          }
         }
-
-        case Map.get(msg_data, :timestamp) do
-          nil -> base_msg
-          timestamp -> Map.put(base_msg, :timestamp, DateTime.to_iso8601(timestamp))
-        end
       end)
 
     payload = %{messages: batch_messages}
 
-    headers = [
-      {"Authorization", "Bearer #{@api_key}"},
-      {"Content-Type", "application/json"}
-    ]
+    # Updated headers - API key is optional for current server
+    headers = case @api_key do
+      "your-secret-api-key" -> [{"Content-Type", "application/json"}]
+      key when is_binary(key) -> [{"Authorization", "Bearer #{key}"}, {"Content-Type", "application/json"}]
+      _ -> [{"Content-Type", "application/json"}]
+    end
 
     case HTTPoison.post("#{@base_url}/predict/batch", Jason.encode!(payload), headers,
            recv_timeout: @timeout * 2
          ) do
       {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
         case Jason.decode(body) do
-          {:ok, results} when is_list(results) ->
-            Logger.debug("Batch spam check completed: #{length(results)} results")
-            {:ok, results}
+          {:ok, result} ->
+            # Handle the new batch response format
+            predictions = Map.get(result, "predictions", [])
+            Logger.debug("Batch spam check completed: #{length(predictions)} results")
+            {:ok, predictions}
+
+          {:error, _} ->
+            Logger.error("Failed to decode batch spam detection response")
+            {:error, :decode_error}
+        end
 
           {:error, _} ->
             Logger.error("Failed to decode batch spam detection response")
@@ -164,13 +178,38 @@ defmodule Sup.SpamDetection.Client do
     end
   end
 
-  def get_fallback_result do
+  def get_fallback_result(message \\ "") do
+    # Basic pattern-based spam detection when service is unavailable
+    spam_patterns = [
+      ~r/viagra|cialis|pharmacy/i,
+      ~r/(win|won|winner).*(money|cash|prize)/i,
+      ~r/(click|visit).*(link|website)/i,
+      ~r/(free|cheap).*(offer|deal)/i,
+      ~r/(urgent|act now|limited time)/i,
+      ~r/bitcoin|crypto|investment/i,
+      ~r/\$\d+/,
+      ~r/(loan|debt|credit)/i
+    ]
+
+    spam_score = Enum.count(spam_patterns, &Regex.match?(&1, message))
+
+    # Check for excessive capitals
+    cap_count = String.length(Regex.replace(~r/[^A-Z]/, message, ""))
+    total_chars = String.length(message)
+    excessive_caps = total_chars > 0 && cap_count / total_chars > 0.5
+
+    is_spam = spam_score > 0 || excessive_caps
+    confidence = min(spam_score / 3.0, 1.0)
+
     %{
-      "is_spam" => false,
-      "spam_probability" => 0.5,
-      "confidence" => 0.1,
-      "processing_time_ms" => 0.0,
-      "error" => "Spam detection service unavailable"
+      "is_spam" => is_spam,
+      "confidence" => confidence,
+      "model_type" => "fallback_rule_based",
+      "processing_time_ms" => 1.0,
+      "metadata" => %{
+        "score" => spam_score,
+        "service_status" => "unavailable"
+      }
     }
   end
 
@@ -180,7 +219,8 @@ defmodule Sup.SpamDetection.Client do
         result
 
       {:error, _} ->
-        get_fallback_result()
+        Logger.warning("Spam detection service unavailable, using fallback")
+        get_fallback_result(message)
     end
   end
 end
