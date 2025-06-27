@@ -15,10 +15,13 @@ Author: Generated for Sup Chat Application
 """
 
 import threading
-from typing import List, Dict, Tuple, Optional, Set
+from typing import List, Dict, Tuple, Optional, Set, Union
 from dataclasses import dataclass, field
 from collections import defaultdict
 import heapq
+import pickle
+import json
+from pathlib import Path
 
 
 @dataclass
@@ -322,6 +325,67 @@ class Trie:
             self.root = TrieNode()
             self._word_count = 0
 
+    def save(self, path: Union[str, Path]) -> None:
+        """
+        Save the Trie to a file using pickle.
+        
+        Args:
+            path: File path to save the Trie
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with self._lock:
+            # Save the entire Trie structure
+            data = {
+                'root': self.root,
+                'case_sensitive': self.case_sensitive,
+                'max_suggestions': self.max_suggestions,
+                '_word_count': self._word_count
+            }
+            
+            with open(path, 'wb') as f:
+                pickle.dump(data, f)
+    
+    def load(self, path: Union[str, Path]) -> None:
+        """
+        Load the Trie from a file.
+        
+        Args:
+            path: File path to load the Trie from
+        """
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Trie file not found: {path}")
+        
+        with self._lock:
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+            
+            self.root = data['root']
+            self.case_sensitive = data['case_sensitive']
+            self.max_suggestions = data['max_suggestions']
+            self._word_count = data['_word_count']
+    
+    def export_to_json(self, path: Union[str, Path]) -> None:
+        """
+        Export Trie words to JSON format for inspection.
+        
+        Args:
+            path: File path to save JSON
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with self._lock:
+            all_words = []
+            self._collect_words(self.root, all_words)
+            
+            # Convert to JSON-serializable format
+            word_dict = {word: freq for word, freq in all_words}
+            
+            with open(path, 'w') as f:
+                json.dump(word_dict, f, indent=2, ensure_ascii=False)
 
 # TODO: Consider implementing the following optimizations:
 # 1. DAFSA (Directed Acyclic Finite State Automaton) for better memory efficiency

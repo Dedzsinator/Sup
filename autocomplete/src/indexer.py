@@ -539,6 +539,57 @@ class HybridIndexer:
         texts, similarities, metadata = zip(*top_results) if top_results else ([], [], [])
         
         return list(texts), list(similarities), list(metadata)
+    
+    def search_specific(
+        self, 
+        index_name: str,
+        query_vector: np.ndarray, 
+        k: int = 10
+    ) -> Tuple[List[str], List[float], List[Dict[str, Any]]]:
+        """Search in a specific index."""
+        if index_name not in self.indexers:
+            raise ValueError(f"Index '{index_name}' not found")
+        
+        return self.indexers[index_name].search(query_vector, k)
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get statistics from all indexes."""
+        stats = {}
+        for name, indexer in self.indexers.items():
+            stats[name] = indexer.get_statistics()
+        
+        total_vectors = sum(s.get('total_vectors', 0) for s in stats.values())
+        stats['total_across_all_indexes'] = total_vectors
+        
+        return stats
+    
+    def save_all(self, base_path: Union[str, Path]):
+        """Save all indexes."""
+        base_path = Path(base_path)
+        base_path.mkdir(parents=True, exist_ok=True)
+        
+        for name, indexer in self.indexers.items():
+            index_path = base_path / f"{name}_index.faiss"
+            indexer.save(index_path)
+            self.logger.info(f"Saved index '{name}' to {index_path}")
+    
+    def load_all(self, base_path: Union[str, Path]):
+        """Load all indexes."""
+        base_path = Path(base_path)
+        
+        for name, indexer in self.indexers.items():
+            index_path = base_path / f"{name}_index.faiss"
+            if index_path.exists():
+                indexer.load(index_path)
+                self.logger.info(f"Loaded index '{name}' from {index_path}")
+            else:
+                self.logger.warning(f"Index file not found: {index_path}")
+    
+    def clear_all(self):
+        """Clear all indexes."""
+        for name, indexer in self.indexers.items():
+            indexer.clear()
+            self.logger.info(f"Cleared index '{name}'")
 
 
 # TODO: Implement the following enhancements:
