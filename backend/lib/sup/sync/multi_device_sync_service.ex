@@ -8,7 +8,7 @@ defmodule Sup.Sync.MultiDeviceSyncService do
   require Logger
 
   alias Sup.Sync.DeviceSyncState
-  alias Sup.Messaging.EnhancedMessageService
+  alias Sup.Messaging.{SyncState, EnhancedMessageService}
   alias Sup.Presence.EnhancedPresenceService
   alias Sup.Repo
   import Ecto.Query
@@ -78,6 +78,75 @@ defmodule Sup.Sync.MultiDeviceSyncService do
   """
   def resolve_conflicts(user_id, conflicts) do
     GenServer.call(__MODULE__, {:resolve_conflicts, user_id, conflicts})
+  end
+
+  @doc """
+  Sync message data to other devices
+  """
+  def sync_message_data(user_id, data) do
+    case get_user_devices(user_id) do
+      {:ok, devices} ->
+        Enum.each(devices, fn device ->
+          send_sync_message(device.device_id, data)
+        end)
+
+        :ok
+
+      {:error, _reason} ->
+        # Fail silently for now
+        :ok
+    end
+  end
+
+  @doc """
+  Get device state for a user
+  """
+  def get_device_state(user_id) do
+    case get_user_devices(user_id) do
+      {:ok, devices} ->
+        device_states =
+          Enum.map(devices, fn device ->
+            %{
+              device_id: device.device_id,
+              last_seen: device.last_seen_at,
+              is_online: device_online?(device),
+              sync_state: get_device_sync_state(device.device_id)
+            }
+          end)
+
+        {:ok,
+         %{
+           user_id: user_id,
+           devices: device_states,
+           total_devices: length(devices)
+         }}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Sync device state with merge strategy
+  """
+  def sync_device_state(user_id, device_info, strategy \\ :merge) do
+    device_id = device_info["device_id"] || Map.get(device_info, :device_id)
+
+    case get_or_create_device(user_id, device_id, device_info) do
+      {:ok, device} ->
+        sync_data = %{
+          device_state: device_info,
+          strategy: strategy,
+          timestamp: DateTime.utc_now()
+        }
+
+        update_sync_state_impl(user_id, device_id, sync_data)
+
+        {:ok, device}
+
+      error ->
+        error
+    end
   end
 
   # GenServer callbacks
@@ -369,13 +438,13 @@ defmodule Sup.Sync.MultiDeviceSyncService do
     Repo.get_by(DeviceSyncState, user_id: user_id, device_id: device_id, is_active: true)
   end
 
-  defp get_messages_since(room_ids, since_timestamp) do
+  defp get_messages_since(_room_ids, _since_timestamp) do
     # This would query ScyllaDB or your message store
     # For now, return empty list
     []
   end
 
-  defp get_message_states_since(user_id, since_timestamp) do
+  defp get_message_states_since(_user_id, _since_timestamp) do
     # This would get read receipts, reactions, etc. since timestamp
     %{
       "read_receipts" => [],
@@ -411,7 +480,7 @@ defmodule Sup.Sync.MultiDeviceSyncService do
     end
   end
 
-  defp resolve_single_conflict(user_id, conflict) do
+  defp resolve_single_conflict(_user_id, conflict) do
     # Implement conflict resolution logic based on conflict type
     case conflict["type"] do
       "message_edit" ->
@@ -616,4 +685,112 @@ defmodule Sup.Sync.MultiDeviceSyncService do
   end
 
   defp deep_merge(_map1, map2), do: map2
+
+  defp send_sync_message(device_id, data) do
+    channel_name = "device:#{device_id}"
+
+    Phoenix.PubSub.broadcast(Sup.PubSub, channel_name, {
+      :sync_message,
+      data
+    })
+  end
+
+  defp device_online?(device) do
+    case device.last_seen_at do
+      nil ->
+        false
+
+      last_seen ->
+        diff = DateTime.diff(DateTime.utc_now(), last_seen, :minute)
+        # Consider online if seen within last 5 minutes
+        diff < 5
+    end
+  end
+
+  defp get_device_sync_state(device_id) do
+    # Get the last sync timestamp for this device
+    case Repo.get_by(SyncState, device_id: device_id) do
+      nil ->
+        %{last_sync: nil, pending_items: 0}
+
+      sync_state ->
+        %{
+          last_sync: sync_state.last_sync_at,
+          pending_items: sync_state.pending_count || 0
+        }
+    end
+  end
+
+  @doc """
+  Remove a device from a user's device list
+  """
+  def remove_device(user_id, device_id) do
+    case Repo.get_by(DeviceSyncState, user_id: user_id, device_id: device_id) do
+      nil ->
+        {:error, "device_not_found"}
+
+      device ->
+        case Repo.delete(device) do
+          {:ok, _deleted_device} ->
+            # Clean up any sync state for this device
+            from(s in SyncState, where: s.device_id == ^device_id)
+            |> Repo.delete_all()
+
+            # Broadcast device removal to user's other devices
+            broadcast_to_user_devices(user_id, %{
+              type: "device_removed",
+              device_id: device_id,
+              timestamp: DateTime.utc_now()
+            })
+
+            Logger.info("Removed device #{device_id} for user #{user_id}")
+            {:ok, "device_removed"}
+
+          {:error, changeset} ->
+            {:error, changeset}
+        end
+    end
+  end
+
+  defp broadcast_to_user_devices(user_id, message) do
+    # Get all active devices for the user
+    case get_user_devices(user_id) do
+      {:ok, devices} ->
+        Enum.each(devices, fn device ->
+          send_sync_message(device.device_id, message)
+        end)
+
+      {:error, _reason} ->
+        # Fail silently
+        :ok
+    end
+  end
+
+  defp get_or_create_device(user_id, device_id, device_info) do
+    case Repo.get_by(DeviceSyncState, user_id: user_id, device_id: device_id) do
+      nil ->
+        # Create new device
+        device_attrs = %{
+          user_id: user_id,
+          device_id: device_id,
+          device_name: device_info["device_name"] || "Unknown Device",
+          device_type: device_info["device_type"] || "unknown",
+          is_active: true,
+          last_seen_at: DateTime.utc_now(),
+          registered_at: DateTime.utc_now()
+        }
+
+        DeviceSyncState.changeset(%DeviceSyncState{}, device_attrs)
+        |> Repo.insert()
+
+      device ->
+        # Update existing device
+        device
+        |> DeviceSyncState.changeset(%{
+          last_seen_at: DateTime.utc_now(),
+          is_active: true
+        })
+        |> Repo.update()
+    end
+  end
 end

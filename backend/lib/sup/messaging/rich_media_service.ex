@@ -4,7 +4,7 @@ defmodule Sup.Messaging.RichMediaService do
   Supports images, videos, audio, and documents with proper validation and optimization.
   """
 
-  alias Sup.Messaging.{Message, MediaAttachment}
+  alias Sup.Messaging.MediaAttachment
   alias Sup.Repo
   require Logger
 
@@ -251,7 +251,7 @@ defmodule Sup.Messaging.RichMediaService do
     end
   end
 
-  defp get_image_metadata(file_path) do
+  defp get_image_metadata(_file_path) do
     # This would use ImageMagick or similar to get image dimensions
     # For now, return empty metadata
     %{
@@ -261,7 +261,7 @@ defmodule Sup.Messaging.RichMediaService do
     }
   end
 
-  defp get_video_metadata(file_path) do
+  defp get_video_metadata(_file_path) do
     # This would use FFmpeg to get video information
     # For now, return empty metadata
     %{
@@ -272,7 +272,7 @@ defmodule Sup.Messaging.RichMediaService do
     }
   end
 
-  defp get_audio_metadata(file_path) do
+  defp get_audio_metadata(_file_path) do
     # This would use FFmpeg to get audio information
     # For now, return empty metadata
     %{
@@ -282,7 +282,7 @@ defmodule Sup.Messaging.RichMediaService do
     }
   end
 
-  defp generate_thumbnail_for_attachment(attachment) do
+  defp generate_thumbnail_for_attachment(_attachment) do
     # This would generate thumbnails using ImageMagick/FFmpeg
     # For now, return success without actual thumbnail generation
     {:ok, "thumbnail_generated"}
@@ -294,7 +294,7 @@ defmodule Sup.Messaging.RichMediaService do
         :ok
 
       {:error, reason} ->
-        Logger.warn("Failed to delete file #{file_path}: #{reason}")
+        Logger.warning("Failed to delete file #{file_path}: #{reason}")
         # Don't fail the operation if file deletion fails
         :ok
     end

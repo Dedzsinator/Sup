@@ -491,8 +491,43 @@ class RankingTrainer:
                 loss = loss_fn(pos_scores, neg_scores)
                 
             else:  # Listwise
-                # TODO: Implement listwise training
-                continue
+                # Implement listwise training
+                query_embs = batch['query_embedding']
+                candidate_embs = batch['candidate_embeddings']  # [batch_size, max_candidates, emb_dim]
+                scores = batch['scores']  # [batch_size, max_candidates]
+                num_candidates = batch['num_candidates']  # [batch_size]
+                
+                batch_predictions = []
+                batch_targets = []
+                
+                for i in range(query_embs.size(0)):
+                    n_cands = num_candidates[i].item()
+                    if n_cands <= 1:
+                        continue
+                    
+                    query_emb = query_embs[i:i+1].expand(n_cands, -1)  # [n_cands, emb_dim]
+                    cand_embs = candidate_embs[i, :n_cands]  # [n_cands, emb_dim]
+                    
+                    # Get predictions for all candidates
+                    predictions = self.model(query_emb, cand_embs, None)  # [n_cands, 1]
+                    targets = scores[i, :n_cands]  # [n_cands]
+                    
+                    batch_predictions.append(predictions.squeeze())
+                    batch_targets.append(targets)
+                
+                if batch_predictions:
+                    # Pad sequences and compute listwise loss
+                    max_len = max(pred.size(0) for pred in batch_predictions)
+                    padded_preds = torch.zeros(len(batch_predictions), max_len, device=self.device)
+                    padded_targets = torch.zeros(len(batch_predictions), max_len, device=self.device)
+                    
+                    for i, (pred, target) in enumerate(zip(batch_predictions, batch_targets)):
+                        padded_preds[i, :pred.size(0)] = pred
+                        padded_targets[i, :target.size(0)] = target
+                    
+                    loss = loss_fn(padded_preds, padded_targets)
+                else:
+                    continue
             
             # Backward pass
             self.optimizer.zero_grad()
@@ -534,8 +569,29 @@ class RankingTrainer:
         # Compute ranking metrics if we have predictions and targets
         metrics = {'loss': avg_loss}
         if predictions_list and targets_list:
-            # Add ranking-specific metrics here (NDCG, MRR, etc.)
-            pass
+            # Calculate ranking-specific metrics
+            import numpy as np
+            predictions_arr = np.array(predictions_list)
+            targets_arr = np.array(targets_list)
+            
+            # Mean Squared Error
+            mse = np.mean((predictions_arr - targets_arr) ** 2)
+            metrics['mse'] = mse
+            
+            # Mean Absolute Error
+            mae = np.mean(np.abs(predictions_arr - targets_arr))
+            metrics['mae'] = mae
+            
+            # Correlation coefficient
+            if len(predictions_arr) > 1:
+                correlation = np.corrcoef(predictions_arr, targets_arr)[0, 1]
+                metrics['correlation'] = correlation if not np.isnan(correlation) else 0.0
+            
+            # Ranking accuracy (if we treat as binary classification)
+            binary_predictions = (predictions_arr > 0.5).astype(float)
+            binary_targets = (targets_arr > 0.5).astype(float)
+            accuracy = np.mean(binary_predictions == binary_targets)
+            metrics['accuracy'] = accuracy
         
         return metrics
     

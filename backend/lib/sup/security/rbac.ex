@@ -5,8 +5,6 @@ defmodule Sup.Security.RBAC do
   """
 
   use Ecto.Schema
-  import Ecto.Changeset
-  import Ecto.Query
   alias Sup.Repo
   alias Sup.Auth.User
 
@@ -193,7 +191,7 @@ defmodule Sup.Security.RBAC do
   @doc """
   Check if user can perform action on resource with ownership check
   """
-  def can_access_resource?(user, resource_type, resource_id, action, resource_owner_id \\ nil) do
+  def can_access_resource?(user, resource_type, _resource_id, action, resource_owner_id \\ nil) do
     # First check basic permissions
     if has_permission?(user, resource_type, action) do
       true
@@ -259,7 +257,7 @@ defmodule Sup.Security.RBAC do
   Validate role assignment (check if user can assign role)
   """
   def can_assign_role?(assigner, target_role) do
-    assigner_permissions = get_user_permissions(assigner)
+    _assigner_permissions = get_user_permissions(assigner)
 
     cond do
       # Admins can assign any role
@@ -319,7 +317,7 @@ defmodule Sup.Security.RBAC do
 
   # Private functions
 
-  defp check_ownership_permission(user, resource, action) do
+  defp check_ownership_permission(_user, _resource, action) do
     # This would be expanded based on specific business logic
     # For now, users can always perform actions on their own resources
     case action do

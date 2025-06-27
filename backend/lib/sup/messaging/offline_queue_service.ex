@@ -44,6 +44,51 @@ defmodule Sup.Messaging.OfflineQueueService do
     GenServer.cast(__MODULE__, {:clear_user_queue, user_id})
   end
 
+  @doc """
+  Get offline messages for a user
+  """
+  def get_offline_messages(user_id) do
+    messages =
+      from(m in OfflineMessage,
+        where: m.user_id == ^user_id and m.delivered == false,
+        order_by: [asc: m.priority, desc: m.queued_at],
+        limit: 100
+      )
+      |> Repo.all()
+
+    formatted_messages =
+      Enum.map(messages, fn msg ->
+        %{
+          id: msg.id,
+          type: msg.message_type,
+          data: msg.message_data,
+          priority: msg.priority,
+          queued_at: msg.queued_at,
+          expires_at: msg.expires_at
+        }
+      end)
+
+    {:ok, formatted_messages}
+  end
+
+  @doc """
+  Mark messages as received
+  """
+  def mark_messages_received(user_id, message_ids) when is_list(message_ids) do
+    {updated_count, _} =
+      from(m in OfflineMessage,
+        where: m.user_id == ^user_id and m.id in ^message_ids
+      )
+      |> Repo.update_all(set: [delivered: true, delivered_at: DateTime.utc_now()])
+
+    Logger.info("Marked #{updated_count} offline messages as delivered for user #{user_id}")
+    {:ok, updated_count}
+  end
+
+  def mark_messages_received(user_id, message_id) when is_binary(message_id) do
+    mark_messages_received(user_id, [message_id])
+  end
+
   # GenServer callbacks
 
   @impl true
@@ -222,7 +267,7 @@ defmodule Sup.Messaging.OfflineQueueService do
       # Highest priority
       %{type: "call"} -> 1
       # High priority for mentions
-      %{metadata: %{mentions: mentions}} when length(mentions) > 0 -> 2
+      %{metadata: %{mentions: [_ | _]}} -> 2
       # Medium-high priority for DMs
       %{type: "direct_message"} -> 3
       # Normal priority

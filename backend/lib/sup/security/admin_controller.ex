@@ -8,7 +8,7 @@ defmodule Sup.Security.AdminController do
   import Ecto.Query
   require Logger
 
-  alias Sup.Security.{AuditLog, Monitor, RBAC, RateLimit}
+  alias Sup.Security.{AuditLog, Monitor, RBAC}
   alias Sup.Auth.User
   alias Sup.Repo
 
@@ -332,8 +332,10 @@ defmodule Sup.Security.AdminController do
   end
 
   defp get_system_health_summary do
+    {uptime_ms, _} = :erlang.statistics(:wall_clock)
+
     %{
-      uptime: System.uptime(),
+      uptime: uptime_ms,
       memory_usage: :erlang.memory(),
       process_count: length(Process.list()),
       timestamp: DateTime.utc_now()

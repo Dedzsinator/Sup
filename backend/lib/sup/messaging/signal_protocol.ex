@@ -5,14 +5,14 @@ defmodule Sup.Messaging.SignalProtocol do
   """
 
   alias Sup.Crypto.{IdentityKey, PreKey, SignedPreKey, Session}
-  alias Sup.Messaging.{EncryptedMessage, KeyBundle}
+  alias Sup.Messaging.KeyBundle
   alias Sup.Repo
   import Ecto.Query
 
   require Logger
 
   @prekey_count 100
-  @signed_prekey_lifetime_days 7
+  # @signed_prekey_lifetime_days removed as it was unused
 
   # Key Generation
   def generate_identity_key(user_id) do

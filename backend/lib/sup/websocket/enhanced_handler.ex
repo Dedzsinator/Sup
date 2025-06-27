@@ -11,7 +11,7 @@ defmodule Sup.WebSocket.EnhancedHandler do
   alias Sup.Presence.EnhancedPresenceService
   alias Sup.Room.RoomService
   alias Sup.Voice.CallService
-  alias Sup.Security.{RateLimit, AuditLog}
+  alias Sup.Security.RateLimit
 
   defstruct [:user_id, :connection_id, :subscriptions, :device_info, :rate_limiter]
 

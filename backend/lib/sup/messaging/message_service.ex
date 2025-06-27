@@ -3,11 +3,37 @@ defmodule Sup.Messaging.MessageService do
   Core messaging service handling message sending, delivery, and routing.
   """
 
-  alias Sup.Messaging.{Message, DeliveryReceipt}
+  alias Sup.Messaging.DeliveryReceipt
   alias Sup.Room.RoomService
   alias Sup.Repo
   alias Sup.ScyllaDB
-  import Ecto.Query
+
+  @doc """
+  Send message with 3 parameters (user_id, room_id, message)
+  """
+  def send_message(user_id, room_id, message) do
+    params = %{
+      "room_id" => room_id,
+      "content" => message,
+      "type" => "text"
+    }
+
+    send_message(user_id, params)
+  end
+
+  @doc """
+  Send message with 4 parameters (user_id, room_id, message, metadata)
+  """
+  def send_message(user_id, room_id, message, metadata) do
+    params = %{
+      "room_id" => room_id,
+      "content" => message,
+      "type" => "text",
+      "metadata" => metadata
+    }
+
+    send_message(user_id, params)
+  end
 
   def send_message(sender_id, %{"room_id" => room_id, "content" => content, "type" => type}) do
     # Verify user can send to this room

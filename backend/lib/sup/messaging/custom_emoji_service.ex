@@ -13,7 +13,7 @@ defmodule Sup.Messaging.CustomEmojiService do
   @supported_image_types ["image/png", "image/gif", "image/webp"]
   @max_emoji_size_kb 256
   @max_emoji_size_bytes @max_emoji_size_kb * 1024
-  @max_emoji_dimension 128
+  # @max_emoji_dimension removed as it was unused
 
   @doc """
   Upload and create a custom emoji
@@ -54,6 +54,13 @@ defmodule Sup.Messaging.CustomEmojiService do
   end
 
   @doc """
+  Get custom emojis for a room (public interface)
+  """
+  def get_room_emojis(room_id) do
+    get_room_emojis(room_id, nil)
+  end
+
+  @doc """
   Get global custom emojis (available to all users)
   """
   def get_global_emojis do
@@ -71,7 +78,7 @@ defmodule Sup.Messaging.CustomEmojiService do
   @doc """
   Search emojis by name or tags
   """
-  def search_emojis(query, user_id, room_id \\ nil) do
+  def search_emojis(query, _user_id, room_id \\ nil) do
     search_term = "%#{String.downcase(query)}%"
 
     base_query =
@@ -152,7 +159,7 @@ defmodule Sup.Messaging.CustomEmojiService do
   """
   def get_emoji_stats(emoji_id, user_id) do
     case get_emoji_with_permissions(emoji_id, user_id) do
-      {:ok, emoji} ->
+      {:ok, _emoji} ->
         stats = %{
           usage_count: get_emoji_usage_count(emoji_id),
           recent_usage: get_recent_emoji_usage(emoji_id),
@@ -237,6 +244,77 @@ defmodule Sup.Messaging.CustomEmojiService do
     end
   end
 
+  @doc """
+  Validate if a user can use a specific emoji
+  """
+  def validate_emoji_usage(user_id, emoji) do
+    # Remove surrounding colons if present
+    emoji_name = String.replace(emoji, ":", "")
+
+    case Repo.get_by(CustomEmoji, name: emoji_name, is_active: true) do
+      nil ->
+        {:error, "emoji_not_found"}
+
+      emoji ->
+        # Check if user has access to this emoji
+        cond do
+          # Global emoji - anyone can use
+          is_nil(emoji.room_id) ->
+            :ok
+
+          # Room-specific emoji - check if user is in the room
+          true ->
+            case RoomService.can_access_room?(user_id, emoji.room_id) do
+              true -> :ok
+              false -> {:error, "no_access_to_emoji"}
+            end
+        end
+    end
+  end
+
+  @doc """
+  Track emoji usage for analytics
+  """
+  def track_emoji_usage(emoji, user_id) do
+    emoji_name = String.replace(emoji, ":", "")
+
+    case Repo.get_by(CustomEmoji, name: emoji_name, is_active: true) do
+      # Don't track non-existent emojis
+      nil ->
+        :ok
+
+      emoji_record ->
+        # Update usage count
+        emoji_record
+        |> CustomEmoji.changeset(%{usage_count: emoji_record.usage_count + 1})
+        |> Repo.update()
+
+        # Track in analytics if available
+        spawn(fn ->
+          try do
+            Sup.Analytics.AnalyticsService.track_event(user_id, "emoji_used", %{
+              emoji_id: emoji_record.id,
+              emoji_name: emoji_name,
+              room_id: emoji_record.room_id
+            })
+          rescue
+            # Fail silently if analytics service is not available
+            _ -> :ok
+          end
+        end)
+
+        :ok
+    end
+  end
+
+  @doc """
+  Create emoji - alias for create_custom_emoji with different signature
+  """
+  def create_emoji(room_id, user_id, emoji_data) do
+    full_emoji_data = Map.put(emoji_data, "room_id", room_id)
+    create_custom_emoji(user_id, full_emoji_data)
+  end
+
   # Private functions
 
   defp validate_emoji_data(emoji_data) do
@@ -288,7 +366,7 @@ defmodule Sup.Messaging.CustomEmojiService do
     end
   end
 
-  defp validate_emoji_dimensions(file_data) do
+  defp validate_emoji_dimensions(_file_data) do
     # This would use an image processing library to check dimensions
     # For now, assume it's valid
     :ok
@@ -394,29 +472,29 @@ defmodule Sup.Messaging.CustomEmojiService do
     end
   end
 
-  defp get_popular_emojis_impl(room_id, limit, days) do
+  defp get_popular_emojis_impl(_room_id, _limit, _days) do
     # This would query message analytics or emoji usage tracking
     # For now, return empty list
     []
   end
 
-  defp get_emoji_usage_count(emoji_id) do
+  defp get_emoji_usage_count(_emoji_id) do
     # This would query message reactions or emoji usage analytics
     # For now, return 0
     0
   end
 
-  defp get_recent_emoji_usage(emoji_id) do
+  defp get_recent_emoji_usage(_emoji_id) do
     # This would get recent usage events
     []
   end
 
-  defp get_emoji_top_users(emoji_id) do
+  defp get_emoji_top_users(_emoji_id) do
     # This would get users who use the emoji most
     []
   end
 
-  defp get_emoji_usage_by_day(emoji_id) do
+  defp get_emoji_usage_by_day(_emoji_id) do
     # This would get daily usage statistics
     %{}
   end
@@ -470,12 +548,12 @@ defmodule Sup.Messaging.CustomEmojiService do
     _ -> nil
   end
 
-  defp optimize_gif(file_path) do
+  defp optimize_gif(_file_path) do
     # GIFs are harder to optimize, skip for now
     nil
   end
 
-  defp optimize_webp(file_path) do
+  defp optimize_webp(_file_path) do
     # WebP is already optimized
     nil
   end
@@ -521,7 +599,7 @@ defmodule Sup.Messaging.CustomEmojiService do
     end
   end
 
-  defp is_admin_user?(user_id) do
+  defp is_admin_user?(_user_id) do
     # This would check if user has admin role
     # For now, return false
     false

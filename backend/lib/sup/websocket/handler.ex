@@ -397,7 +397,7 @@ defmodule Sup.WebSocket.Handler do
 
   # Search handlers
   defp handle_message(%{"type" => "search_messages", "data" => %{"query" => query} = data}, state) do
-    room_id = Map.get(data, "room_id")
+    _room_id = Map.get(data, "room_id")
     limit = Map.get(data, "limit", 20)
 
     case MessageService.search_messages(state.user_id, query, limit) do
@@ -425,7 +425,7 @@ defmodule Sup.WebSocket.Handler do
   defp handle_message(
          %{
            "type" => "initiate_call",
-           "data" => %{"room_id" => room_id, "type" => call_type, "participants" => participants}
+           "data" => %{"room_id" => _room_id, "type" => call_type, "participants" => participants}
          },
          state
        ) do
@@ -539,7 +539,7 @@ defmodule Sup.WebSocket.Handler do
 
   # Multi-device sync handlers
   defp handle_message(%{"type" => "request_sync", "data" => _data}, state) do
-    case Sup.Messaging.MultiDeviceSyncService.get_device_state(state.user_id) do
+    case Sup.Sync.MultiDeviceSyncService.get_device_state(state.user_id) do
       {:ok, sync_state} ->
         response =
           Jason.encode!(%{
@@ -561,7 +561,7 @@ defmodule Sup.WebSocket.Handler do
   end
 
   defp handle_message(%{"type" => "sync_device_state", "data" => device_info}, state) do
-    case Sup.Messaging.MultiDeviceSyncService.sync_device_state(state.user_id, device_info) do
+    case Sup.Sync.MultiDeviceSyncService.sync_device_state(state.user_id, device_info, :merge) do
       {:ok, sync_result} ->
         response =
           Jason.encode!(%{
@@ -689,7 +689,7 @@ defmodule Sup.WebSocket.Handler do
   end
 
   defp handle_message(message, state) do
-    Logger.warn("Unknown message type: #{inspect(message)}")
+    Logger.warning("Unknown message type: #{inspect(message)}")
 
     error_response =
       Jason.encode!(%{

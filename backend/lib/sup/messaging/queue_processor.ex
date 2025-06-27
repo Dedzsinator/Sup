@@ -32,12 +32,13 @@ defmodule Sup.Messaging.QueueProcessor do
     {:noreply, new_state}
   end
 
+  @impl true
   def handle_cast({:queue_message, message}, state) do
     new_queue = :queue.in(message, state.queue)
     {:noreply, %{state | queue: new_queue}}
   end
 
-  defp process_messages(%{queue: queue, processing: true} = state) do
+  defp process_messages(%{queue: _queue, processing: true} = state) do
     # Already processing, skip
     state
   end
@@ -67,7 +68,7 @@ defmodule Sup.Messaging.QueueProcessor do
         handle_push_notification(message)
 
       _ ->
-        Logger.warn("Unknown message type: #{message.type}")
+        Logger.warning("Unknown message type: #{message.type}")
     end
   end
 

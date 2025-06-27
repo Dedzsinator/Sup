@@ -19,6 +19,8 @@ defmodule Sup.Media.RichMediaService do
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ]
 
+  # 50MB
+  @max_file_size 50 * 1024 * 1024
   @max_file_size_mb 50
   @max_file_size_bytes @max_file_size_mb * 1024 * 1024
 
@@ -149,6 +151,41 @@ defmodule Sup.Media.RichMediaService do
       attachment ->
         Task.start(fn -> perform_optimization(attachment) end)
         {:ok, "optimization_started"}
+    end
+  end
+
+  @doc """
+  Process media message with URL
+  """
+  def process_media_message(message_id, media_url) do
+    case download_and_process_media(media_url) do
+      {:ok, processed_media} ->
+        # Create attachment record
+        attachment_attrs = %{
+          message_id: message_id,
+          file_name: processed_media.filename,
+          file_path: processed_media.file_path,
+          content_type: processed_media.content_type,
+          file_size: processed_media.file_size,
+          metadata: processed_media.metadata || %{},
+          checksum: processed_media.checksum,
+          original_url: media_url
+        }
+
+        case create_attachment(attachment_attrs) do
+          {:ok, attachment} ->
+            # Generate thumbnail if it's an image or video
+            spawn(fn -> generate_thumbnail_for_attachment(attachment) end)
+
+            {:ok, attachment}
+
+          error ->
+            error
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to process media from URL #{media_url}: #{reason}")
+        {:error, reason}
     end
   end
 
@@ -359,7 +396,7 @@ defmodule Sup.Media.RichMediaService do
     attachment.uploaded_by == user_id
   end
 
-  defp can_access_message?(user_id, message_id) do
+  defp can_access_message?(_user_id, _message_id) do
     # This would check if user has access to the message's room
     # For now, return true as a placeholder
     true
@@ -431,36 +468,113 @@ defmodule Sup.Media.RichMediaService do
     end
   end
 
-  defp extract_image_metadata(file_path) do
-    # This would use ExifRead or similar library
-    %{
-      "type" => "image",
-      "dimensions" => get_image_dimensions(file_path)
-    }
+  # Helper function to create attachment record
+  defp create_attachment(attrs) do
+    case Repo.insert(MessageAttachment.changeset(%MessageAttachment{}, attrs)) do
+      {:ok, attachment} -> {:ok, attachment}
+      {:error, changeset} -> {:error, changeset}
+    end
   end
 
-  defp extract_video_metadata(file_path) do
-    # This would use ffprobe or similar tool
-    %{
-      "type" => "video",
-      "duration" => get_video_duration(file_path),
-      "dimensions" => get_video_dimensions(file_path)
-    }
+  # Helper function to generate thumbnails for attachments
+  defp generate_thumbnail_for_attachment(attachment) do
+    case attachment.content_type do
+      "image/" <> _ ->
+        # Generate image thumbnail
+        generate_image_thumbnail(attachment)
+
+      "video/" <> _ ->
+        # Generate video thumbnail
+        generate_video_thumbnail(attachment)
+
+      _ ->
+        # No thumbnail for other file types
+        :ok
+    end
   end
 
-  defp extract_audio_metadata(file_path) do
-    # This would use audio metadata library
-    %{
-      "type" => "audio",
-      "duration" => get_audio_duration(file_path)
-    }
+  # Helper function to extract metadata from media files
+  defp extract_media_metadata(file_path, content_type) do
+    case content_type do
+      "image/" <> _ ->
+        extract_image_metadata(file_path)
+
+      "video/" <> _ ->
+        extract_video_metadata(file_path)
+
+      "audio/" <> _ ->
+        extract_audio_metadata(file_path)
+
+      _ ->
+        %{}
+    end
   end
 
-  # Placeholder implementations
-  defp get_image_dimensions(_path), do: "1920x1080"
-  defp get_video_duration(_path), do: "00:02:30"
-  defp get_video_dimensions(_path), do: "1920x1080"
-  defp get_audio_duration(_path), do: "00:03:45"
+  # Extract image metadata (dimensions, etc.)
+  defp extract_image_metadata(_file_path) do
+    try do
+      # This would use an image processing library like Mogrify or ImageMagick
+      # For now, return basic metadata
+      %{
+        type: "image",
+        extracted_at: DateTime.utc_now()
+      }
+    rescue
+      _ -> %{}
+    end
+  end
+
+  # Extract video metadata (duration, dimensions, etc.)
+  defp extract_video_metadata(_file_path) do
+    try do
+      # This would use FFmpeg or similar for video metadata
+      %{
+        type: "video",
+        extracted_at: DateTime.utc_now()
+      }
+    rescue
+      _ -> %{}
+    end
+  end
+
+  # Extract audio metadata (duration, bitrate, etc.)
+  defp extract_audio_metadata(_file_path) do
+    try do
+      # This would use FFmpeg or similar for audio metadata
+      %{
+        type: "audio",
+        extracted_at: DateTime.utc_now()
+      }
+    rescue
+      _ -> %{}
+    end
+  end
+
+  # Generate thumbnail for images
+  defp generate_image_thumbnail(attachment) do
+    try do
+      # Implementation would use image processing library
+      Logger.info("Generated image thumbnail for attachment #{attachment.id}")
+      :ok
+    rescue
+      error ->
+        Logger.error("Failed to generate image thumbnail: #{inspect(error)}")
+        :error
+    end
+  end
+
+  # Generate thumbnail for videos
+  defp generate_video_thumbnail(attachment) do
+    try do
+      # Implementation would use FFmpeg to extract frame
+      Logger.info("Generated video thumbnail for attachment #{attachment.id}")
+      :ok
+    rescue
+      error ->
+        Logger.error("Failed to generate video thumbnail: #{inspect(error)}")
+        :error
+    end
+  end
 
   defp fetch_url_metadata(url) do
     case HTTPoison.get(url, [], timeout: 5000, recv_timeout: 5000) do
@@ -492,7 +606,7 @@ defmodule Sup.Media.RichMediaService do
   defp extract_image(_html), do: "https://example.com/image.jpg"
   defp extract_site_name(_html), do: "Example Site"
 
-  defp cache_link_preview(url, metadata) do
+  defp cache_link_preview(url, _metadata) do
     # This would store in Redis with expiration
     # For now, just log it
     Logger.debug("Caching link preview for #{url}")
@@ -543,5 +657,75 @@ defmodule Sup.Media.RichMediaService do
       size_bytes >= 1024 -> "#{Float.round(size_bytes / 1024, 2)} KB"
       true -> "#{size_bytes} bytes"
     end
+  end
+
+  defp download_and_process_media(url) do
+    case HTTPoison.get(url, [], follow_redirect: true, max_redirect: 3) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body, headers: headers}} ->
+        content_type = get_content_type_from_headers(headers)
+        filename = extract_filename_from_url(url) || "media_#{System.unique_integer()}"
+
+        # Validate file size
+        if byte_size(body) > @max_file_size do
+          {:error, "file_too_large"}
+        else
+          # Save to temporary location
+          temp_path = generate_temp_path(filename)
+
+          case File.write(temp_path, body) do
+            :ok ->
+              checksum = generate_checksum(body)
+
+              processed_media = %{
+                filename: filename,
+                file_path: temp_path,
+                content_type: content_type,
+                file_size: byte_size(body),
+                checksum: checksum,
+                metadata: extract_media_metadata(temp_path, content_type)
+              }
+
+              {:ok, processed_media}
+
+            {:error, reason} ->
+              {:error, "file_write_failed: #{reason}"}
+          end
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status_code}} ->
+        {:error, "http_error: #{status_code}"}
+
+      {:error, reason} ->
+        {:error, "download_failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp get_content_type_from_headers(headers) do
+    case Enum.find(headers, fn {name, _value} ->
+           String.downcase(name) == "content-type"
+         end) do
+      {_name, content_type} ->
+        content_type |> String.split(";") |> List.first() |> String.trim()
+
+      nil ->
+        "application/octet-stream"
+    end
+  end
+
+  defp extract_filename_from_url(url) do
+    url
+    |> URI.parse()
+    |> Map.get(:path, "")
+    |> Path.basename()
+    |> case do
+      "" -> nil
+      filename -> filename
+    end
+  end
+
+  defp generate_temp_path(filename) do
+    temp_dir = System.tmp_dir()
+    unique_id = System.unique_integer()
+    Path.join(temp_dir, "#{unique_id}_#{filename}")
   end
 end

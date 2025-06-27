@@ -3,7 +3,6 @@ defmodule Sup.Security.TwoFactor do
   Two-Factor Authentication functionality using TOTP (Time-based One-Time Password).
   """
 
-  alias Sup.Auth.User
   alias Sup.Repo
   alias Sup.Security.Config
   import Ecto.Changeset

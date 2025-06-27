@@ -44,6 +44,20 @@ defmodule Sup.Presence.PresenceService do
     end
   end
 
+  @doc """
+  Update user status (online, away, busy, etc.)
+  """
+  def update_user_status(user_id, status) do
+    GenServer.cast(__MODULE__, {:update_user_status, user_id, status})
+  end
+
+  @doc """
+  Update user activity (typing, recording, etc.)
+  """
+  def update_user_activity(user_id, activity) do
+    GenServer.cast(__MODULE__, {:update_user_activity, user_id, activity})
+  end
+
   # Server callbacks
   @impl true
   def init(_opts) do
@@ -132,6 +146,73 @@ defmodule Sup.Presence.PresenceService do
 
     # Broadcast typing status to room
     broadcast_typing_status(user_id, room_id, is_typing)
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:update_user_status, user_id, status}, state) do
+    # Update user status in ETS
+    case :ets.lookup(@table_name, user_id) do
+      [{^user_id, connections, _last_seen}] ->
+        :ets.insert(@table_name, {user_id, connections, DateTime.utc_now(), status})
+
+        # Update in Redis
+        Redis.command([
+          "HSET",
+          "presence:#{user_id}",
+          "status",
+          to_string(status),
+          "last_seen",
+          DateTime.to_unix(DateTime.utc_now(), :microsecond)
+        ])
+
+        # Broadcast status change
+        broadcast_presence_change(user_id, status)
+
+      [] ->
+        # User not online, just update Redis
+        Redis.command([
+          "HSET",
+          "presence:#{user_id}",
+          "status",
+          to_string(status),
+          "last_seen",
+          DateTime.to_unix(DateTime.utc_now(), :microsecond)
+        ])
+    end
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:update_user_activity, user_id, activity}, state) do
+    # Update user activity (typing, recording, etc.)
+    timestamp = DateTime.utc_now()
+
+    # Store activity in ETS with expiration
+    :ets.insert(
+      @typing_table,
+      {{user_id, :activity}, {activity, DateTime.to_unix(timestamp, :microsecond)}}
+    )
+
+    # Update in Redis with TTL
+    Redis.command([
+      "HSET",
+      "presence:#{user_id}",
+      "activity",
+      to_string(activity),
+      "activity_at",
+      DateTime.to_unix(timestamp, :microsecond)
+    ])
+
+    # 5 minutes TTL
+    Redis.command(["EXPIRE", "presence:#{user_id}", 300])
+
+    # Broadcast activity change
+    Phoenix.PubSub.broadcast(Sup.PubSub, "user_activity", %{
+      user_id: user_id,
+      activity: activity,
+      timestamp: timestamp
+    })
 
     {:noreply, state}
   end

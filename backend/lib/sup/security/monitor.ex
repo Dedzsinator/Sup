@@ -6,9 +6,7 @@ defmodule Sup.Security.Monitor do
 
   use GenServer
   require Logger
-  alias Sup.Security.{AuditLog, RateLimit}
-  alias Sup.Repo
-  import Ecto.Query
+  alias Sup.Security.AuditLog
 
   # Check every minute
   @check_interval :timer.minutes(1)
@@ -193,7 +191,7 @@ defmodule Sup.Security.Monitor do
     end
   end
 
-  defp analyze_failed_login(%{ip_address: ip, user_id: user_id}, metadata, state) do
+  defp analyze_failed_login(%{ip_address: ip, user_id: user_id}, metadata, _state) do
     alerts = []
     suspicious_ips = MapSet.new()
     blocked_ips = MapSet.new()

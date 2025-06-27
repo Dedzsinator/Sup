@@ -62,7 +62,7 @@ defmodule Sup.SpamDetection.Service do
         case MessageService.send_message(user_id, room_id, message) do
           {:ok, message_data} ->
             # Submit as training data (assuming it's ham)
-            if spam_probability < 0.3 do
+            if confidence < 0.3 do
               spawn(fn -> Client.submit_training_data(message, user_id, false, timestamp) end)
             end
 

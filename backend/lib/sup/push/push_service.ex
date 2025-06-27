@@ -146,7 +146,7 @@ defmodule Sup.Push.PushService do
       "android" -> send_fcm_notification(token, message, room_name, state)
       "ios" -> send_apns_notification(token, message, room_name, state)
       "web" -> send_web_push_notification(token, message, room_name, state)
-      _ -> Logger.warn("Unknown platform: #{platform}")
+      _ -> Logger.warning("Unknown platform: #{platform}")
     end
   end
 
@@ -177,23 +177,23 @@ defmodule Sup.Push.PushService do
           Logger.debug("FCM notification sent successfully")
 
         {:ok, %HTTPoison.Response{status_code: status_code, body: body}} ->
-          Logger.warn("FCM notification failed: #{status_code} - #{body}")
+          Logger.warning("FCM notification failed: #{status_code} - #{body}")
 
         {:error, reason} ->
           Logger.error("FCM request failed: #{inspect(reason)}")
       end
     else
-      Logger.warn("FCM server key not configured")
+      Logger.warning("FCM server key not configured")
     end
   end
 
-  defp send_apns_notification(token, message, room_name, state) do
+  defp send_apns_notification(token, _message, _room_name, _state) do
     # APNS implementation would go here
     # For now, just log
     Logger.debug("APNS notification would be sent to #{token}")
   end
 
-  defp send_web_push_notification(token, message, room_name, state) do
+  defp send_web_push_notification(token, _message, _room_name, _state) do
     # Web Push implementation would go here
     # For now, just log
     Logger.debug("Web Push notification would be sent to #{token}")

@@ -296,29 +296,30 @@ defmodule Sup.Voice.CallService do
   end
 
   defp broadcast_call_event(call, event, additional_data \\ nil) do
-    # This would integrate with your WebSocket/PubSub system
-    # For now, we'll just log it
-    require Logger
-    Logger.info("Call event: #{event} for call #{call.id}")
+    # Broadcast to all call participants
+    Phoenix.PubSub.broadcast(Sup.PubSub, "calls", %{
+      event: event,
+      call: Call.public_fields(call),
+      data: additional_data
+    })
 
-    # TODO: Implement actual broadcasting
-    # Phoenix.PubSub.broadcast(Sup.PubSub, "calls", %{
-    #   event: event,
-    #   call: Call.public_fields(call),
-    #   data: additional_data
-    # })
+    # Also broadcast to each participant individually
+    Enum.each(call.participants, fn participant_id ->
+      Phoenix.PubSub.broadcast(Sup.PubSub, "user:#{participant_id}", %{
+        type: :call_event,
+        event: event,
+        call: Call.public_fields(call),
+        data: additional_data
+      })
+    end)
   end
 
   defp broadcast_signaling(call_id, from_user_id, type, data) do
-    require Logger
-    Logger.info("WebRTC signaling: #{type} from #{from_user_id} for call #{call_id}")
-
-    # TODO: Implement actual signaling broadcast
-    # Phoenix.PubSub.broadcast(Sup.PubSub, "call:#{call_id}", %{
-    #   type: :webrtc_signaling,
-    #   signaling_type: type,
-    #   from_user_id: from_user_id,
-    #   data: data
-    # })
+    Phoenix.PubSub.broadcast(Sup.PubSub, "call:#{call_id}", %{
+      type: :webrtc_signaling,
+      signaling_type: type,
+      from_user_id: from_user_id,
+      data: data
+    })
   end
 end

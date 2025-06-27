@@ -5,8 +5,8 @@ defmodule Sup.SpamDetection.Client do
 
   require Logger
 
-  @base_url Application.get_env(:sup, :spam_detection_url, "http://localhost:8082")
-  @api_key Application.get_env(:sup, :spam_detection_api_key, "your-secret-api-key")
+  @base_url Application.compile_env(:sup, :spam_detection_url, "http://localhost:8082")
+  @api_key Application.compile_env(:sup, :spam_detection_api_key, "your-secret-api-key")
   @timeout 5000
 
   def check_spam(message, user_id, timestamp \\ nil) do
@@ -20,11 +20,17 @@ defmodule Sup.SpamDetection.Client do
     }
 
     # Updated headers - API key is optional for current server
-    headers = case @api_key do
-      "your-secret-api-key" -> [{"Content-Type", "application/json"}]
-      key when is_binary(key) -> [{"Authorization", "Bearer #{key}"}, {"Content-Type", "application/json"}]
-      _ -> [{"Content-Type", "application/json"}]
-    end
+    headers =
+      case @api_key do
+        "your-secret-api-key" ->
+          [{"Content-Type", "application/json"}]
+
+        key when is_binary(key) ->
+          [{"Authorization", "Bearer #{key}"}, {"Content-Type", "application/json"}]
+
+        _ ->
+          [{"Content-Type", "application/json"}]
+      end
 
     case HTTPoison.post("#{@base_url}/predict", Jason.encode!(payload), headers,
            recv_timeout: @timeout
@@ -62,10 +68,11 @@ defmodule Sup.SpamDetection.Client do
           text: Map.get(msg_data, :message) || Map.get(msg_data, :text),
           user_id: Map.get(msg_data, :user_id) || "anonymous",
           metadata: %{
-            timestamp: case Map.get(msg_data, :timestamp) do
-              nil -> DateTime.utc_now() |> DateTime.to_iso8601()
-              timestamp -> DateTime.to_iso8601(timestamp)
-            end
+            timestamp:
+              case Map.get(msg_data, :timestamp) do
+                nil -> DateTime.utc_now() |> DateTime.to_iso8601()
+                timestamp -> DateTime.to_iso8601(timestamp)
+              end
           }
         }
       end)
@@ -73,11 +80,17 @@ defmodule Sup.SpamDetection.Client do
     payload = %{messages: batch_messages}
 
     # Updated headers - API key is optional for current server
-    headers = case @api_key do
-      "your-secret-api-key" -> [{"Content-Type", "application/json"}]
-      key when is_binary(key) -> [{"Authorization", "Bearer #{key}"}, {"Content-Type", "application/json"}]
-      _ -> [{"Content-Type", "application/json"}]
-    end
+    headers =
+      case @api_key do
+        "your-secret-api-key" ->
+          [{"Content-Type", "application/json"}]
+
+        key when is_binary(key) ->
+          [{"Authorization", "Bearer #{key}"}, {"Content-Type", "application/json"}]
+
+        _ ->
+          [{"Content-Type", "application/json"}]
+      end
 
     case HTTPoison.post("#{@base_url}/predict/batch", Jason.encode!(payload), headers,
            recv_timeout: @timeout * 2
@@ -89,11 +102,6 @@ defmodule Sup.SpamDetection.Client do
             predictions = Map.get(result, "predictions", [])
             Logger.debug("Batch spam check completed: #{length(predictions)} results")
             {:ok, predictions}
-
-          {:error, _} ->
-            Logger.error("Failed to decode batch spam detection response")
-            {:error, :decode_error}
-        end
 
           {:error, _} ->
             Logger.error("Failed to decode batch spam detection response")

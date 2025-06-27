@@ -8,7 +8,14 @@ defmodule Sup.MixProject do
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      aliases: aliases()
+      aliases: aliases(),
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test
+      ]
     ]
   end
 
@@ -63,7 +70,11 @@ defmodule Sup.MixProject do
       # Development & Testing
       {:mix_test_watch, "~> 1.1", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.3", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.3", only: [:dev], runtime: false},
+      {:ex_machina, "~> 2.7", only: :test},
+      {:bypass, "~> 2.1", only: :test},
+      {:mox, "~> 1.0", only: :test},
+      {:excoveralls, "~> 0.17", only: :test}
     ]
   end
 

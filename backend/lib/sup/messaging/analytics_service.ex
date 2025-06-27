@@ -8,7 +8,6 @@ defmodule Sup.Messaging.AnalyticsService do
   require Logger
 
   alias Sup.Messaging.{Message, MessageAnalytics}
-  alias Sup.Room.Room
   alias Sup.Repo
   import Ecto.Query
 
@@ -51,6 +50,54 @@ defmodule Sup.Messaging.AnalyticsService do
     GenServer.call(__MODULE__, {:get_global_analytics, start_date, end_date})
   end
 
+  @doc """
+  Get message analytics for specific criteria
+  """
+  def get_message_analytics(user_id, room_id, date_range) do
+    %{start_date: start_date, end_date: end_date} = date_range
+
+    query =
+      from(a in MessageAnalytics,
+        where: a.timestamp >= ^start_date and a.timestamp <= ^end_date
+      )
+
+    query = if user_id, do: where(query, [a], a.user_id == ^user_id), else: query
+    query = if room_id, do: where(query, [a], a.room_id == ^room_id), else: query
+
+    analytics = Repo.all(query)
+
+    summary = %{
+      total_messages: length(analytics),
+      date_range: date_range,
+      user_id: user_id,
+      room_id: room_id,
+      breakdown: group_analytics_by_date(analytics)
+    }
+
+    {:ok, summary}
+  end
+
+  @doc """
+  Get room insights including activity patterns and user engagement
+  """
+  def get_room_insights(room_id) do
+    end_date = DateTime.utc_now()
+    # Last 30 days
+    start_date = DateTime.add(end_date, -30, :day)
+
+    insights = %{
+      room_id: room_id,
+      period: "30_days",
+      message_count: get_room_message_count(room_id, start_date, end_date),
+      active_users: get_room_active_users(room_id, start_date, end_date),
+      peak_activity_hours: get_room_peak_hours(room_id, start_date, end_date),
+      engagement_score: calculate_room_engagement(room_id, start_date, end_date),
+      growth_trend: calculate_room_growth_trend(room_id)
+    }
+
+    {:ok, insights}
+  end
+
   # GenServer callbacks
 
   @impl true
@@ -83,7 +130,7 @@ defmodule Sup.Messaging.AnalyticsService do
   end
 
   @impl true
-  def handle_cast({:track_activity, user_id, activity_type, metadata}, state) do
+  def handle_cast({:track_activity, user_id, activity_type, _metadata}, state) do
     spawn(fn ->
       # Store user activity in a separate table or Redis for fast access
       activity_key = "user_activity:#{user_id}:#{Date.utc_today()}"
@@ -256,5 +303,86 @@ defmodule Sup.Messaging.AnalyticsService do
       start_date: start_date,
       end_date: end_date
     }
+  end
+
+  defp group_analytics_by_date(analytics) do
+    analytics
+    |> Enum.group_by(fn record -> Date.to_string(DateTime.to_date(record.timestamp)) end)
+    |> Enum.map(fn {date, records} ->
+      %{
+        date: date,
+        message_count: length(records),
+        unique_users: records |> Enum.map(& &1.user_id) |> Enum.uniq() |> length()
+      }
+    end)
+    |> Enum.sort_by(& &1.date)
+  end
+
+  defp get_room_message_count(room_id, start_date, end_date) do
+    from(a in MessageAnalytics,
+      where:
+        a.room_id == ^room_id and
+          a.timestamp >= ^start_date and
+          a.timestamp <= ^end_date,
+      select: count(a.id)
+    )
+    |> Repo.one() || 0
+  end
+
+  defp get_room_active_users(room_id, start_date, end_date) do
+    from(a in MessageAnalytics,
+      where:
+        a.room_id == ^room_id and
+          a.timestamp >= ^start_date and
+          a.timestamp <= ^end_date,
+      distinct: a.user_id,
+      select: count(a.user_id)
+    )
+    |> Repo.one() || 0
+  end
+
+  defp get_room_peak_hours(room_id, start_date, end_date) do
+    # Get message counts by hour of day
+    from(a in MessageAnalytics,
+      where:
+        a.room_id == ^room_id and
+          a.timestamp >= ^start_date and
+          a.timestamp <= ^end_date,
+      group_by: fragment("EXTRACT(hour FROM ?)", a.timestamp),
+      select: {fragment("EXTRACT(hour FROM ?)", a.timestamp), count(a.id)},
+      order_by: [desc: count(a.id)],
+      limit: 3
+    )
+    |> Repo.all()
+    |> Enum.map(fn {hour, count} -> %{hour: trunc(hour), message_count: count} end)
+  end
+
+  defp calculate_room_engagement(room_id, start_date, end_date) do
+    # Simple engagement score based on messages per active user
+    message_count = get_room_message_count(room_id, start_date, end_date)
+    active_users = get_room_active_users(room_id, start_date, end_date)
+
+    if active_users > 0 do
+      Float.round(message_count / active_users, 2)
+    else
+      0.0
+    end
+  end
+
+  defp calculate_room_growth_trend(room_id) do
+    # Compare current week vs previous week
+    current_week_end = DateTime.utc_now()
+    current_week_start = DateTime.add(current_week_end, -7, :day)
+    previous_week_start = DateTime.add(current_week_start, -7, :day)
+
+    current_messages = get_room_message_count(room_id, current_week_start, current_week_end)
+    previous_messages = get_room_message_count(room_id, previous_week_start, current_week_start)
+
+    if previous_messages > 0 do
+      growth_rate = (current_messages - previous_messages) / previous_messages * 100
+      Float.round(growth_rate, 2)
+    else
+      if current_messages > 0, do: 100.0, else: 0.0
+    end
   end
 end

@@ -358,7 +358,7 @@ defmodule Sup.Messaging.BotService do
     end
   end
 
-  defp send_command_to_webhook(bot, message, command) do
+  defp send_command_to_webhook(_bot, _message, _command) do
     # Implementation for command-specific webhooks
     nil
   end
@@ -375,13 +375,13 @@ defmodule Sup.Messaging.BotService do
     |> Repo.update_all(set: [last_activity_at: DateTime.utc_now()])
   end
 
-  defp get_bot_message_count(bot_id) do
+  defp get_bot_message_count(_bot_id) do
     # This would query your message storage system
     # For now, return a placeholder
     0
   end
 
-  defp get_bot_command_count(bot_id) do
+  defp get_bot_command_count(_bot_id) do
     # This would query your analytics system
     # For now, return a placeholder
     0
@@ -399,19 +399,19 @@ defmodule Sup.Messaging.BotService do
     end
   end
 
-  defp calculate_bot_uptime(bot_id) do
+  defp calculate_bot_uptime(_bot_id) do
     # Calculate uptime percentage over the last 30 days
     # This would typically involve checking error logs and downtime
     # For now, return a placeholder
     99.5
   end
 
-  defp send_webhook(bot, webhook_data) do
+  defp send_webhook(_bot, _webhook_data) do
     # Implementation for sending webhook notifications
     {:ok, "webhook_sent"}
   end
 
-  defp process_webhook_locally(bot, webhook_data) do
+  defp process_webhook_locally(_bot, _webhook_data) do
     # Process webhook data locally if no external webhook URL
     {:ok, "processed_locally"}
   end

@@ -5,7 +5,6 @@ defmodule Sup.Auth.Service do
 
   alias Sup.Auth.{User, Guardian}
   alias Sup.Repo
-  import Ecto.Query
 
   def register(%{email: email, password: password, username: username}) do
     # Check if user already exists

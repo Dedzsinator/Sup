@@ -16,8 +16,7 @@ defmodule Sup.Presence.EnhancedPresenceService do
   @voice_presence_table :voice_presence_table
 
   # Status types
-  @presence_statuses [:online, :away, :busy, :invisible, :offline]
-  @activity_types [:typing, :recording_audio, :recording_video, :uploading_file, :in_call]
+  # Module attributes removed as they were unused
 
   # Client API
   def start_link(opts) do
@@ -342,7 +341,7 @@ defmodule Sup.Presence.EnhancedPresenceService do
   defp get_device_info(user_id) do
     # Get device information from registry
     case Registry.lookup(Sup.ConnectionRegistry, user_id) do
-      connections when length(connections) > 0 ->
+      [_ | _] = connections ->
         %{device_count: length(connections)}
 
       [] ->
@@ -353,7 +352,6 @@ defmodule Sup.Presence.EnhancedPresenceService do
   defp get_device_count(user_id) do
     case Registry.lookup(Sup.ConnectionRegistry, user_id) do
       connections -> length(connections)
-      [] -> 0
     end
   end
 end

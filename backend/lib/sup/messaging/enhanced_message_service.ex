@@ -4,7 +4,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
   threaded conversations, message reactions, and advanced features.
   """
 
-  alias Sup.Messaging.{Message, DeliveryReceipt, SignalProtocol, MessageThread, MessageReaction}
+  alias Sup.Messaging.{DeliveryReceipt, SignalProtocol, MessageThread, MessageReaction}
   alias Sup.Messaging.{BotService, OfflineQueueService, CustomEmojiService}
   alias Sup.Analytics.AnalyticsService
   alias Sup.Media.RichMediaService
@@ -17,7 +17,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
   import Ecto.Query
   require Logger
 
-  @supported_message_types [:text, :image, :file, :audio, :video, :sticker, :location, :contact]
+  # Module attribute removed as it was unused
 
   # Enhanced message sending with E2E encryption
   def send_encrypted_message(
@@ -128,21 +128,21 @@ defmodule Sup.Messaging.EnhancedMessageService do
       true ->
         # Check for spam before processing the message
         case SpamDetectionService.process_message(
-               params["content"],
                sender_id,
-               params["room_id"]
+               params["room_id"],
+               params["content"]
              ) do
           {:error, :spam_detected, spam_info} ->
             Logger.warning("Spam message blocked from user #{sender_id}: #{inspect(spam_info)}")
             {:error, :spam_detected}
 
-          {:ok, message_data} ->
-            # Message was already processed and sent by spam detection service
+          {:ok, :allowed, message_data} ->
+            # Message was processed and allowed by spam detection service
             {:ok, message_data}
 
-          # If spam detection returns the original content, continue with normal processing
-          {:ok, _processed_content} ->
-            process_normal_message(sender_id, params)
+          {:ok, :flagged, message_data} ->
+            # Message was flagged but allowed by spam detection service
+            {:ok, message_data}
 
           # If spam detection fails, continue with normal processing (fail-open)
           _other ->
@@ -304,7 +304,11 @@ defmodule Sup.Messaging.EnhancedMessageService do
   end
 
   # Message threading
-  def create_thread(user_id, parent_message_id, %{"content" => content, "type" => type} = params) do
+  def create_thread(
+        user_id,
+        parent_message_id,
+        %{"content" => _content, "type" => _type} = params
+      ) do
     case can_reply_to_message?(user_id, parent_message_id) do
       true ->
         parent_message = get_message(parent_message_id)
@@ -337,6 +341,49 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
       false ->
         {:error, "unauthorized"}
+    end
+  end
+
+  def reply_to_thread(thread_id, user_id, params) do
+    case Repo.get(MessageThread, thread_id) do
+      nil ->
+        {:error, "thread_not_found"}
+
+      thread ->
+        if RoomService.can_send_message?(user_id, thread.room_id) do
+          thread_params =
+            Map.merge(params, %{
+              "room_id" => thread.room_id,
+              "thread_id" => thread_id,
+              "reply_to_id" => thread_id
+            })
+
+          case send_message(user_id, thread_params) do
+            {:ok, message} ->
+              # Update thread metadata
+              thread
+              |> MessageThread.changeset(%{
+                last_message_id: message.id,
+                last_activity_at: DateTime.utc_now(),
+                message_count: thread.message_count + 1
+              })
+              |> Repo.update()
+
+              {:ok, message}
+
+            error ->
+              error
+          end
+        else
+          {:error, "unauthorized"}
+        end
+    end
+  end
+
+  def get_thread(thread_id) do
+    case Repo.get(MessageThread, thread_id) do
+      nil -> {:error, "thread_not_found"}
+      thread -> {:ok, thread}
     end
   end
 
@@ -604,7 +651,7 @@ defmodule Sup.Messaging.EnhancedMessageService do
     ScyllaDB.get_thread_participants(thread_id)
   end
 
-  defp update_thread_read_status(thread_id, user_id) do
+  defp update_thread_read_status(_thread_id, _user_id) do
     # Implementation for tracking thread read status
     :ok
   end
@@ -694,5 +741,32 @@ defmodule Sup.Messaging.EnhancedMessageService do
 
   defp generate_message_id do
     Ecto.UUID.generate()
+  end
+
+  @doc """
+  Get grouped reactions for a message
+  """
+  def get_message_reactions(message_id) do
+    reactions =
+      from(r in MessageReaction,
+        where: r.message_id == ^message_id,
+        select: %{emoji: r.emoji, user_id: r.user_id, inserted_at: r.inserted_at}
+      )
+      |> Repo.all()
+
+    # Group reactions by emoji
+    grouped_reactions =
+      reactions
+      |> Enum.group_by(& &1.emoji)
+      |> Enum.map(fn {emoji, reactions_list} ->
+        %{
+          emoji: emoji,
+          count: length(reactions_list),
+          users: Enum.map(reactions_list, & &1.user_id),
+          latest_at: Enum.max_by(reactions_list, & &1.inserted_at).inserted_at
+        }
+      end)
+
+    {:ok, grouped_reactions}
   end
 end

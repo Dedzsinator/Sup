@@ -12,18 +12,16 @@ defmodule Sup.ApiRouter do
   alias Sup.Messaging.{
     MessageService,
     EnhancedMessageService,
-    MessageReaction,
-    MessageThread,
     CustomEmojiService,
     OfflineQueueService,
-    AnalyticsService,
-    RichMediaService,
-    MultiDeviceSyncService
+    AnalyticsService
   }
+
+  alias Sup.Sync.MultiDeviceSyncService
 
   alias Sup.Voice.CallService
   alias Sup.Autocomplete.Service, as: AutocompleteService
-  alias Sup.Security.{RateLimitPlug, AuthorizationPlug, AuditLog}
+  alias Sup.Security.{RateLimitPlug, AuthorizationPlug}
   alias Sup.SpamDetection.Service, as: SpamDetectionService
 
   plug(:match)
@@ -537,7 +535,7 @@ defmodule Sup.ApiRouter do
 
   get "/messages/search" do
     query = conn.query_params["q"]
-    room_id = conn.query_params["room_id"]
+    _room_id = conn.query_params["room_id"]
     limit = String.to_integer(conn.query_params["limit"] || "20")
     user_id = conn.assigns.current_user.id
 
@@ -672,7 +670,7 @@ defmodule Sup.ApiRouter do
   end
 
   delete "/rooms/:room_id/emojis/:emoji_id" do
-    room_id = conn.path_params["room_id"]
+    _room_id = conn.path_params["room_id"]
     emoji_id = conn.path_params["emoji_id"]
     user_id = conn.assigns.current_user.id
 

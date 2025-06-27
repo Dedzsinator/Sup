@@ -204,6 +204,72 @@ defmodule Sup.Auth.FriendService do
     Repo.exists?(query)
   end
 
+  @doc """
+  Respond to a friend request (accept or decline)
+  """
+  def respond_to_friend_request(addressee_id, requester_id, response)
+      when response in [:accept, :decline] do
+    case response do
+      :accept -> accept_friend_request(addressee_id, requester_id)
+      :decline -> decline_friend_request(addressee_id, requester_id)
+    end
+  end
+
+  @doc """
+  Search users by username, email, or friend code
+  """
+  def search_users(query, requesting_user_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 20)
+
+    # Don't return the requesting user in search results
+    search_query = "%#{String.downcase(query)}%"
+
+    users =
+      from(u in User,
+        where:
+          u.id != ^requesting_user_id and
+            (ilike(u.username, ^search_query) or
+               ilike(u.email, ^search_query) or
+               ilike(u.friend_code, ^search_query)),
+        limit: ^limit,
+        select: [:id, :username, :email, :friend_code, :avatar_url]
+      )
+      |> Repo.all()
+
+    # Check friendship status for each user
+    user_ids = Enum.map(users, & &1.id)
+
+    friendships =
+      from(f in Friendship,
+        where:
+          (f.requester_id == ^requesting_user_id and f.addressee_id in ^user_ids) or
+            (f.requester_id in ^user_ids and f.addressee_id == ^requesting_user_id)
+      )
+      |> Repo.all()
+
+    # Create a map of user_id -> friendship_status
+    friendship_map =
+      Enum.reduce(friendships, %{}, fn friendship, acc ->
+        other_user_id =
+          if friendship.requester_id == requesting_user_id do
+            friendship.addressee_id
+          else
+            friendship.requester_id
+          end
+
+        Map.put(acc, other_user_id, friendship.status)
+      end)
+
+    # Attach friendship status to each user
+    users_with_status =
+      Enum.map(users, fn user ->
+        friendship_status = Map.get(friendship_map, user.id, :none)
+        Map.put(user, :friendship_status, friendship_status)
+      end)
+
+    {:ok, users_with_status}
+  end
+
   defp find_user_by_identifier(identifier) do
     # Try to find by username first
     user = Repo.get_by(User, username: identifier)
